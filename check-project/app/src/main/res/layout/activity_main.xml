@@ -1,0 +1,228 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#050612">
+
+    <LinearLayout
+        android:id="@+id/gateScreen"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:padding="28dp"
+        android:background="#050612">
+
+        <ImageView
+            android:layout_width="190dp"
+            android:layout_height="190dp"
+            android:layout_marginBottom="20dp"
+            android:src="@drawable/total_logo"
+            android:scaleType="fitCenter"
+            android:contentDescription="total"/>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="عليك التحديث قبل التشغيل"
+            android:textColor="#FFFFFF"
+            android:textSize="28sp"
+            android:textStyle="bold"
+            android:gravity="center"
+            android:layout_marginBottom="30dp"/>
+
+        <Button
+            android:id="@+id/approveBtn"
+            android:layout_width="match_parent"
+            android:layout_height="62dp"
+            android:text="موافق ومتابعة ⚽"
+            android:textColor="#FFFFFF"
+            android:textSize="21sp"
+            android:textStyle="bold"
+            android:background="@drawable/bg_gate_button"
+            android:backgroundTint="@null"/>
+    </LinearLayout>
+
+    <androidx.drawerlayout.widget.DrawerLayout
+        android:id="@+id/drawer"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layoutDirection="rtl"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:background="#050612">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="68dp"
+                android:gravity="center_vertical"
+                android:paddingStart="10dp"
+                android:paddingEnd="10dp"
+                android:background="@drawable/bg_topbar">
+
+                <ImageButton
+                    android:id="@+id/menuBtn"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:src="@drawable/ic_menu"
+                    android:background="@android:color/transparent"
+                    android:padding="12dp"
+                    android:contentDescription="القائمة"/>
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="total ⚽"
+                    android:textColor="#FFFFFF"
+                    android:textSize="28sp"
+                    android:textStyle="bold"
+                    android:gravity="center"/>
+
+                <TextView
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:text="⌕"
+                    android:textColor="#FFFFFF"
+                    android:textSize="34sp"
+                    android:gravity="center"/>
+            </LinearLayout>
+
+            <FrameLayout
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1">
+
+                <ScrollView
+                    android:id="@+id/homeContent"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:fillViewport="true"
+                    android:clipToPadding="false">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:paddingStart="16dp"
+                        android:paddingEnd="16dp"
+                        android:paddingTop="12dp"
+                        android:paddingBottom="24dp">
+
+                        <ImageView
+                            android:layout_width="match_parent"
+                            android:layout_height="190dp"
+                            android:src="@drawable/hero_banner"
+                            android:scaleType="centerCrop"
+                            android:contentDescription="بطولة كرة القدم"
+                            android:layout_marginBottom="16dp"/>
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="قنوات total"
+                            android:textColor="#FFFFFF"
+                            android:textSize="28sp"
+                            android:textStyle="bold"
+                            android:gravity="center"/>
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="اختر نوع القنوات وافتح الملف مباشرة"
+                            android:textColor="#B9B7C9"
+                            android:textSize="15sp"
+                            android:gravity="center"
+                            android:layout_marginTop="6dp"
+                            android:layout_marginBottom="18dp"/>
+
+                        <Button
+                            android:id="@+id/lastChannelBtn"
+                            android:layout_width="match_parent"
+                            android:layout_height="52dp"
+                            android:layout_marginTop="12dp"
+                            android:text="▶ متابعة آخر قناة"
+                            android:textColor="#FFFFFF"
+                            android:textSize="15sp"
+                            android:textStyle="bold"
+                            android:background="@drawable/bg_category_card"/>
+
+                        <Button
+                            android:id="@+id/allChannelsBtn"
+                            android:layout_width="match_parent"
+                            android:layout_height="62dp"
+                            android:text="📺  كل القنوات"
+                            android:textColor="#FFFFFF"
+                            android:textStyle="bold"
+                            android:textSize="20sp"
+                            android:background="@drawable/bg_all_channels"
+                            android:backgroundTint="@null"
+                            android:layout_marginBottom="20dp"/>
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="📁  ملفات القنوات"
+                            android:textColor="#FFFFFF"
+                            android:textSize="22sp"
+                            android:textStyle="bold"
+                            android:gravity="end"
+                            android:layout_marginBottom="12dp"/>
+
+                        <LinearLayout
+                            android:id="@+id/categoryContainer"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical"/>
+                    </LinearLayout>
+                </ScrollView>
+
+                <LinearLayout
+                    android:id="@+id/infoContent"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:orientation="vertical"
+                    android:gravity="center_horizontal"
+                    android:padding="28dp"
+                    android:background="#050612"
+                    android:visibility="gone">
+
+                    <TextView android:id="@+id/pageTitle" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#C34CFF" android:textSize="30sp" android:textStyle="bold" android:gravity="center" android:layout_marginTop="36dp"/>
+                    <TextView android:id="@+id/pageBody" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#FFFFFF" android:textSize="18sp" android:gravity="center" android:lineSpacingExtra="8dp" android:layout_marginTop="32dp"/>
+                    <Button android:id="@+id/backHomeBtn" android:layout_width="match_parent" android:layout_height="58dp" android:layout_marginTop="40dp" android:text="العودة للرئيسية" android:textColor="#FFFFFF" android:textSize="18sp" android:textStyle="bold" android:background="@drawable/bg_all_channels" android:backgroundTint="@null"/>
+                </LinearLayout>
+            </FrameLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="76dp"
+                android:orientation="horizontal"
+                android:gravity="center"
+                android:background="#080918"
+                android:paddingStart="4dp"
+                android:paddingEnd="4dp">
+
+                <Button android:id="@+id/homeItem" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:text="⌂\nالرئيسية" android:textColor="#C72CFF" android:textSize="12sp" android:backgroundTint="#080918"/>
+                <Button android:id="@+id/channelsItem" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:text="📺\nالقنوات" android:textColor="#D5D5E8" android:textSize="12sp" android:backgroundTint="#080918"/>
+                <Button android:id="@+id/favoritesItem" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:text="♥\nالمفضلة" android:textColor="#D5D5E8" android:textSize="12sp" android:backgroundTint="#080918"/>
+            </LinearLayout>
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/drawerPanel"
+            android:layout_width="290dp"
+            android:layout_height="match_parent"
+            android:layout_gravity="start"
+            android:orientation="vertical"
+            android:background="@drawable/bg_drawer"
+            android:padding="16dp">
+
+            <TextView android:layout_width="match_parent" android:layout_height="92dp" android:text="⚽ total" android:textColor="#FFFFFF" android:textSize="28sp" android:textStyle="bold" android:gravity="center"/>
+            <Button android:id="@+id/liveItem" android:layout_width="match_parent" android:layout_height="54dp" android:text="🔴 كل القنوات" android:textSize="18sp"/>
+        </LinearLayout>
+    </androidx.drawerlayout.widget.DrawerLayout>
+</FrameLayout>

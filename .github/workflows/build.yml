@@ -6,7 +6,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -22,23 +21,12 @@ jobs:
         with:
           gradle-version: '8.7'
 
-      - name: Extract uploaded project
-        run: |
-          mkdir -p /tmp/iptv-build
-          unzip -q total-iptv-updated-project.zip -d /tmp/iptv-build
-          test -f /tmp/iptv-build/app/build.gradle
-          test -s /tmp/iptv-build/app/src/main/res/raw/channels.m3u
-          echo "Uploaded project verified"
-          wc -c /tmp/iptv-build/app/src/main/res/raw/channels.m3u
-
-      - name: Build APK
-        run: |
-          cd /tmp/iptv-build
-          gradle assembleDebug
+      - name: Build modified project
+        working-directory: check-project
+        run: gradle assembleDebug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: total-APK
-          path: /tmp/iptv-build/app/build/outputs/apk/debug/*.apk
-          if-no-files-found: error
+          path: check-project/app/build/outputs/apk/debug/*.apk
