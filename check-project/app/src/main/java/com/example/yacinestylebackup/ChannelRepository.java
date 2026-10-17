@@ -57,7 +57,7 @@ final class ChannelRepository {
             List<Channel> channels;
             List<String> categories;
             try {
-                File cache = new File(app.getFilesDir(), "playlist-cache-v3-" + BuildConfig.VERSION_CODE + ".bin");
+                File cache = new File(app.getFilesDir(), "playlist-cache-v3-" + 1 + ".bin");
                 Parsed parsed = readCache(cache);
                 if (parsed == null) {
                     parsed = parsePlaylist(app);
