@@ -186,8 +186,19 @@ public class MainActivity extends ComponentActivity {
 
     private void buildCategoryFolders() {
         categoryContainer.removeAllViews();
-        ArrayList<String> cats = readCategories();
+        TextView loadingText = new TextView(this);
+        loadingText.setText("جاري تجهيز القنوات لأول مرة...");
+        loadingText.setTextColor(Color.WHITE);
+        loadingText.setPadding(dp(12), dp(16), dp(12), dp(16));
+        categoryContainer.addView(loadingText);
+        ChannelRepository.load(this, (channels, categories) -> {
+            if (isFinishing() || isDestroyed()) return;
+            categoryContainer.removeAllViews();
+            addCategoryFolders(categories);
+        });
+    }
 
+    private void addCategoryFolders(java.util.List<String> cats) {
         for (int i = 0; i < cats.size(); i += 2) {
             LinearLayout row = new LinearLayout(this);
             row.setOrientation(LinearLayout.HORIZONTAL);

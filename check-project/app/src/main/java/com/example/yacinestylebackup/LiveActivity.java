@@ -49,9 +49,11 @@ public class LiveActivity extends ComponentActivity {
     private boolean fullscreen = false;
     private boolean controlsLocked = false;
     private final ArrayList<String> names = new ArrayList<>();
-    private final ArrayList<String> searchBaseNames = new ArrayList<>();
-    private final ArrayList<String> searchBaseUrls = new ArrayList<>();
     private final ArrayList<String> urls = new ArrayList<>();
+    private final ArrayList<String> baseNames = new ArrayList<>();
+    private final ArrayList<String> baseUrls = new ArrayList<>();
+    // Pre-normalized names avoid lowercasing every channel on each search keystroke.
+    private final ArrayList<String> normalizedBaseNames = new ArrayList<>();
     private int currentIndex = -1;
     private int retryCount = 0;
 
@@ -60,6 +62,7 @@ public class LiveActivity extends ComponentActivity {
     private String selectedCategory;
     private boolean favoritesOnly = false;
     private ArrayAdapter<String> channelAdapter;
+    private boolean initialChannelLoad = true;
 
     @Override
     protected void onCreate(Bundle b) {
@@ -90,11 +93,6 @@ public class LiveActivity extends ComponentActivity {
 
         loadChannels(selectedCategory);
 
-        searchBaseNames.clear();
-        searchBaseNames.addAll(names);
-        searchBaseUrls.clear();
-        searchBaseUrls.addAll(urls);
-
         channelAdapter = new ArrayAdapter<>(
                 this, android.R.layout.simple_list_item_1, names);
 
@@ -102,15 +100,6 @@ public class LiveActivity extends ComponentActivity {
 
         String autoplayName = getIntent().getStringExtra("autoplayName");
         String autoplayUrl = getIntent().getStringExtra("autoplayUrl");
-        if (autoplayName != null && autoplayUrl != null) {
-            names.clear();
-            urls.clear();
-            names.add(autoplayName);
-            urls.add(autoplayUrl);
-            channelAdapter.notifyDataSetChanged();
-            currentIndex = 0;
-            playCurrent();
-        }
 
         channelList.setOnItemClickListener((a, v, pos, id) -> {
             if (pos < urls.size()) {
@@ -139,14 +128,8 @@ public class LiveActivity extends ComponentActivity {
             names.clear();
             urls.clear();
             currentIndex = -1;
-            loadChannels(selectedCategory);
-            searchBaseNames.clear();
-            searchBaseNames.addAll(names);
-            searchBaseUrls.clear();
-            searchBaseUrls.addAll(urls);
-            channelAdapter.notifyDataSetChanged();
             search.setQuery("", false);
-            status.setText(names.isEmpty() ? "لا توجد قنوات" : "تم تحديث القنوات • اختر قناة");
+            loadChannels(selectedCategory);
         });
 
         search.setOnQueryTextListener(new SearchView.OnQueryTextListener() {
@@ -178,50 +161,44 @@ public class LiveActivity extends ComponentActivity {
     }
 
     private void loadChannels(String wanted) {
-        String currentCategory = "عام";
-        boolean skipNextUrl = false;
-
-        try (BufferedReader br = new BufferedReader(
-                new InputStreamReader(getResources().openRawResource(R.raw.channels)))) {
-
-            String line;
-            String pendingName = null;
-
-            while ((line = br.readLine()) != null) {
-                line = line.trim();
-
-                if (line.startsWith("#EXTINF")) {
-                    int comma = line.indexOf(',');
-                    pendingName = comma >= 0 ? line.substring(comma + 1).trim() : "قناة";
-
-                    if (isCategoryHeader(pendingName)) {
-                        currentCategory = cleanCategory(pendingName);
-                        skipNextUrl = true;
-                        pendingName = null;
-                    } else {
-                        skipNextUrl = false;
-                    }
-
-                } else if (!line.startsWith("#") && !line.isEmpty()) {
-                    if (skipNextUrl) {
-                        skipNextUrl = false;
-                        continue;
-                    }
-
-                    if (pendingName != null) {
-                        boolean categoryOk = wanted == null || wanted.equals(currentCategory);
-                        Set<String> favs = prefs.getStringSet("favorite_channels", new HashSet<>());
-                        boolean favoriteOk = !favoritesOnly || (favs != null && favs.contains(pendingName));
-                        if (categoryOk && favoriteOk) {
-                            names.add(pendingName);
-                            urls.add(line);
-                        }
-                        pendingName = null;
-                    }
+        loading.setVisibility(View.VISIBLE);
+        status.setText("جاري تجهيز القنوات...");
+        ChannelRepository.load(this, (channels, categories) -> {
+            if (isFinishing() || isDestroyed()) return;
+            baseNames.clear();
+            baseUrls.clear();
+            normalizedBaseNames.clear();
+            Set<String> favs = prefs.getStringSet("favorite_channels", new HashSet<>());
+            for (ChannelRepository.Channel channel : channels) {
+                boolean categoryOk = wanted == null || wanted.equals(channel.category);
+                boolean favoriteOk = !favoritesOnly || (favs != null && favs.contains(channel.name));
+                if (categoryOk && favoriteOk) {
+                    baseNames.add(channel.name);
+                    baseUrls.add(channel.url);
+                    normalizedBaseNames.add(channel.name.toLowerCase(java.util.Locale.ROOT));
                 }
             }
-
-        } catch (Exception ignored) { }
+            names.clear();
+            urls.clear();
+            names.addAll(baseNames);
+            urls.addAll(baseUrls);
+            boolean shouldAutoplay = false;
+            if (initialChannelLoad) {
+                initialChannelLoad = false;
+                String autoplayName = getIntent().getStringExtra("autoplayName");
+                String autoplayUrl = getIntent().getStringExtra("autoplayUrl");
+                if (autoplayName != null && autoplayUrl != null) {
+                    names.clear(); urls.clear();
+                    names.add(autoplayName); urls.add(autoplayUrl);
+                    currentIndex = 0;
+                    shouldAutoplay = true;
+                }
+            }
+            if (channelAdapter != null) channelAdapter.notifyDataSetChanged();
+            loading.setVisibility(View.GONE);
+            status.setText(names.isEmpty() ? "لا توجد قنوات في هذا القسم" : "تم تجهيز القنوات • اختر قناة");
+            if (shouldAutoplay) playCurrent();
+        });
     }
 
     private void playCurrent() {
@@ -233,12 +210,10 @@ public class LiveActivity extends ComponentActivity {
         status.setText("جاري الاتصال: " + names.get(currentIndex));
         loading.setVisibility(View.VISIBLE);
 
-        if (player != null) player.release();
-
-        player = new ExoPlayer.Builder(this).build();
-        playerView.setPlayer(player);
-
-        player.addListener(new Player.Listener() {
+        if (player == null) {
+            player = new ExoPlayer.Builder(this).build();
+            playerView.setPlayer(player);
+            player.addListener(new Player.Listener() {
             @Override
             public void onPlaybackStateChanged(int state) {
                 if (state == Player.STATE_BUFFERING) {
@@ -269,7 +244,8 @@ public class LiveActivity extends ComponentActivity {
                     if (!isFinishing()) playCurrent();
                 }, Math.min(5000, 1500 + (retryCount * 500L)));
             }
-        });
+            });
+        }
 
         player.setMediaItem(MediaItem.fromUri(Uri.parse(urls.get(currentIndex))));
         player.prepare();
@@ -277,17 +253,17 @@ public class LiveActivity extends ComponentActivity {
     }
 
     private void filterChannels(String query) {
-        String q = query == null ? "" : query.trim().toLowerCase();
+        String q = query == null ? "" : query.trim().toLowerCase(java.util.Locale.ROOT);
         names.clear();
         urls.clear();
-        for (int i = 0; i < searchBaseNames.size(); i++) {
-            if (searchBaseNames.get(i).toLowerCase().contains(q)) {
-                names.add(searchBaseNames.get(i));
-                urls.add(searchBaseUrls.get(i));
+        for (int i = 0; i < baseNames.size(); i++) {
+            if (normalizedBaseNames.get(i).contains(q)) {
+                names.add(baseNames.get(i));
+                urls.add(baseUrls.get(i));
             }
         }
         currentIndex = -1;
-        channelAdapter.notifyDataSetChanged();
+        if (channelAdapter != null) channelAdapter.notifyDataSetChanged();
     }
 
     private void toggleFavorite() {
