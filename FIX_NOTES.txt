@@ -1,0 +1,3 @@
+Fix: M3U display-name parsing now ignores commas inside quoted attributes such as data:image/jpeg;base64 logos.
+This prevents /9j/4AAQ... image payloads from appearing as movie names. Existing channel/movie URLs and upload service/permissions are preserved.
+The supplied movies.m3u is included as movies-source.m3u for reference; the app continues using the existing combined channels.m3u.

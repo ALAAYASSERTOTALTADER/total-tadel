@@ -1,13 +1,19 @@
-name: Build APK
+name: Build TOTAL IPTV APK
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Set up Java
@@ -21,12 +27,12 @@ jobs:
         with:
           gradle-version: '8.7'
 
-      - name: Build modified project
-        working-directory: check-project
-        run: gradle assembleDebug
+      - name: Build APK
+        run: gradle --no-daemon assembleDebug
 
-      - name: Upload APK
+      - name: Save APK
         uses: actions/upload-artifact@v4
         with:
-          name: total-APK
-          path: check-project/app/build/outputs/apk/debug/*.apk
+          name: TOTAL-IPTV-APK
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
