@@ -28,7 +28,8 @@ jobs:
           unzip -q total-iptv-updated-project.zip -d /tmp/iptv-build
           test -f /tmp/iptv-build/app/build.gradle
           test -s /tmp/iptv-build/app/src/main/res/raw/channels.m3u
-          ls -lh /tmp/iptv-build/app/src/main/res/raw/channels.m3u
+          echo "Uploaded project verified"
+          wc -c /tmp/iptv-build/app/src/main/res/raw/channels.m3u
 
       - name: Build APK
         run: |
