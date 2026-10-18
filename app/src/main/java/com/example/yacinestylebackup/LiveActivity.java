@@ -50,6 +50,8 @@ public class LiveActivity extends ComponentActivity {
     private boolean controlsLocked = false;
     private final ArrayList<String> names = new ArrayList<>();
     private final ArrayList<String> urls = new ArrayList<>();
+    private final ArrayList<String> allNames = new ArrayList<>();
+    private final ArrayList<String> allUrls = new ArrayList<>();
     private int currentIndex = -1;
     private int retryCount = 0;
 
@@ -87,6 +89,8 @@ public class LiveActivity extends ComponentActivity {
         sectionTitle.setText(favoritesOnly ? "⭐ المفضلة" : (selectedCategory == null ? "📺 كل القنوات" : "📁 " + selectedCategory));
 
         loadChannels(selectedCategory);
+        allNames.addAll(names);
+        allUrls.addAll(urls);
 
         channelAdapter = new ArrayAdapter<>(
                 this, android.R.layout.simple_list_item_1, names);
@@ -133,6 +137,10 @@ public class LiveActivity extends ComponentActivity {
             urls.clear();
             currentIndex = -1;
             loadChannels(selectedCategory);
+            allNames.clear();
+            allNames.addAll(names);
+            allUrls.clear();
+            allUrls.addAll(urls);
             channelAdapter.notifyDataSetChanged();
             search.setQuery("", false);
             status.setText(names.isEmpty() ? "لا توجد قنوات" : "تم تحديث القنوات • اختر قناة");
@@ -290,15 +298,15 @@ public class LiveActivity extends ComponentActivity {
         String q = query == null ? "" : query.trim().toLowerCase();
         names.clear();
         urls.clear();
-        loadChannels(selectedCategory);
-        if (!q.isEmpty()) {
-            for (int i = names.size() - 1; i >= 0; i--) {
-                if (!names.get(i).toLowerCase().contains(q)) {
-                    names.remove(i);
-                    urls.remove(i);
-                }
+
+        for (int i = 0; i < allNames.size(); i++) {
+            String name = allNames.get(i);
+            if (q.isEmpty() || name.toLowerCase().contains(q)) {
+                names.add(name);
+                urls.add(allUrls.get(i));
             }
         }
+
         currentIndex = -1;
         channelAdapter.notifyDataSetChanged();
     }
