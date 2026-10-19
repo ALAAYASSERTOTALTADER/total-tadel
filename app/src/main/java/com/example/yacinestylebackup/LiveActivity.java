@@ -21,7 +21,6 @@ import android.widget.FrameLayout;
 import android.widget.ListView;
 import android.widget.ProgressBar;
 import android.app.ProgressDialog;
-import android.app.ProgressDialog;
 import android.widget.SearchView;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -113,8 +112,25 @@ public class LiveActivity extends ComponentActivity {
 
         sectionTitle.setText(favoritesOnly ? "⭐ المفضلة" : (selectedCategory == null ? "📺 كل القنوات" : "📁 " + selectedCategory));
 
-        channelAdapter = new ArrayAdapter<>(
-                this, android.R.layout.simple_list_item_1, names);
+        channelAdapter = new ArrayAdapter<String>(
+                this, R.layout.item_channel, R.id.channelName, names) {
+            @Override
+            public View getView(int position, View convertView, ViewGroup parent) {
+                View row = convertView;
+                if (row == null) {
+                    row = getLayoutInflater().inflate(R.layout.item_channel, parent, false);
+                }
+                TextView itemName = row.findViewById(R.id.channelName);
+                Button downloadButton = row.findViewById(R.id.downloadItemButton);
+                itemName.setText(getItem(position));
+                downloadButton.setOnClickListener(v -> {
+                    if (position >= 0 && position < urls.size() && position < names.size()) {
+                        startMovieDownload(names.get(position), urls.get(position));
+                    }
+                });
+                return row;
+            }
+        };
         channelList.setAdapter(channelAdapter);
 
         channelList.setOnItemClickListener((a, v, pos, id) -> {
@@ -169,18 +185,16 @@ public class LiveActivity extends ComponentActivity {
             }
         });
 
+        // Only play an item when this screen was explicitly opened with an item.
+        // Do not automatically resume the previously saved channel/file.
         String startupName = getIntent().getStringExtra("autoplayName");
         String startupUrl = getIntent().getStringExtra("autoplayUrl");
-        if (startupUrl == null || startupUrl.trim().isEmpty()) {
-            startupName = prefs.getString("last_channel_name", null);
-            startupUrl = prefs.getString("last_channel_url", null);
-        }
 
         // Start saved playback before parsing the full playlist.
         if (startupUrl != null && !startupUrl.trim().isEmpty()) {
             playChannel(startupName == null ? "آخر قناة" : startupName, startupUrl);
         } else {
-            status.setText("جاري تجهيز القنوات...");
+            status.setText("Please wait...");
         }
         loadChannels(selectedCategory);
 
@@ -229,56 +243,10 @@ public class LiveActivity extends ComponentActivity {
         if (channelsLoading) return;
 
         channelsLoading = true;
-        if (activeChannelUrl == null) status.setText("جاري تجهيز القنوات...");
+        if (activeChannelUrl == null) status.setText("Please wait...");
 
         new Thread(() -> {
-            ArrayList<String> parsedNames = new ArrayList<>();
-            ArrayList<String> parsedUrls = new ArrayList<>();
-            ArrayList<String> parsedCategories = new ArrayList<>();
-            String category = "عام";
-            boolean skipNextUrl = false;
-
-            try (BufferedReader br = new BufferedReader(
-                    new InputStreamReader(
-                            getResources().openRawResource(R.raw.channels),
-                            java.nio.charset.StandardCharsets.UTF_8))) {
-                String line;
-                String pendingName = null;
-
-                while ((line = br.readLine()) != null) {
-                    line = line.trim();
-
-                    if (line.startsWith("#EXTINF")) {
-                        int comma = findDisplayNameComma(line);
-                        pendingName = comma >= 0
-                                ? line.substring(comma + 1).trim() : null;
-
-                        if (isCategoryHeader(pendingName)) {
-                            category = cleanCategory(pendingName);
-                            skipNextUrl = true;
-                            pendingName = null;
-                        } else {
-                            skipNextUrl = false;
-                            if (!isValidDisplayName(pendingName)) pendingName = null;
-                        }
-                    } else if (!line.startsWith("#") && !line.isEmpty()) {
-                        if (skipNextUrl) {
-                            skipNextUrl = false;
-                            continue;
-                        }
-
-                        if (pendingName != null) {
-                            parsedNames.add(pendingName);
-                            parsedUrls.add(line);
-                            parsedCategories.add(category);
-                            pendingName = null;
-                        }
-                    }
-                }
-            } catch (Exception e) {
-                android.util.Log.e("LiveActivity", "Playlist loading failed", e);
-            }
-
+            PlaylistCache.Data cached = PlaylistCache.load(this);
             runOnUiThread(() -> {
                 channelsLoading = false;
                 if (isFinishing() || isDestroyed()) return;
@@ -286,16 +254,17 @@ public class LiveActivity extends ComponentActivity {
                 allNames.clear();
                 allUrls.clear();
                 allCategories.clear();
-                allNames.addAll(parsedNames);
-                allUrls.addAll(parsedUrls);
-                allCategories.addAll(parsedCategories);
+                allNames.addAll(cached.names);
+                allUrls.addAll(cached.urls);
+                allCategories.addAll(cached.categories);
                 channelsLoaded = true;
 
                 applyChannelFilter(wanted);
                 if (activeChannelUrl == null) {
+                    loading.setVisibility(View.GONE);
                     status.setText(names.isEmpty()
-                            ? "لا توجد قنوات في هذا القسم"
-                            : "اختر قناة لبدء البث");
+                            ? "No items in this section"
+                            : "Choose an item to start playback");
                 }
             });
         }, "m3u-loader").start();
@@ -348,7 +317,7 @@ public class LiveActivity extends ComponentActivity {
         activeChannelUrl = url;
         final int generation = ++playbackGeneration;
 
-        status.setText("جاري الاتصال: " + name);
+        status.setText("Please wait...");
         loading.setVisibility(View.VISIBLE);
 
         if (player == null) {
@@ -362,7 +331,7 @@ public class LiveActivity extends ComponentActivity {
 
                     if (state == Player.STATE_BUFFERING) {
                         loading.setVisibility(View.VISIBLE);
-                        status.setText("جاري تحميل البث...");
+                        status.setText("Please wait...");
                     } else if (state == Player.STATE_READY) {
                         loading.setVisibility(View.GONE);
                         status.setText("مباشر الآن • " + activeChannelName);

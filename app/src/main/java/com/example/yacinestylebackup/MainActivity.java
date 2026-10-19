@@ -163,30 +163,7 @@ public class MainActivity extends ComponentActivity {
     }
 
     private ArrayList<String> readCategories() {
-        LinkedHashSet<String> result = new LinkedHashSet<>();
-
-        try (BufferedReader br = new BufferedReader(
-                new InputStreamReader(getResources().openRawResource(R.raw.channels), java.nio.charset.StandardCharsets.UTF_8))) {
-
-            String line;
-            while ((line = br.readLine()) != null) {
-                line = line.trim();
-
-                if (line.startsWith("#EXTINF")) {
-                    int comma = findDisplayNameComma(line);
-                    if (comma >= 0) {
-                        String name = line.substring(comma + 1).trim();
-
-                        if (isValidDisplayName(name) && isCategoryHeader(name)) {
-                            String c = cleanCategory(name);
-                            if (!c.isEmpty()) result.add(c);
-                        }
-                    }
-                }
-            }
-        } catch (Exception ignored) { }
-
-        return new ArrayList<>(result);
+        return PlaylistCache.load(this).categoryNames;
     }
 
     private Button createFolderButton(String category) {
