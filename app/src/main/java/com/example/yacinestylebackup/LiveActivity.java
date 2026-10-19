@@ -431,28 +431,60 @@ public class LiveActivity extends ComponentActivity {
     }
 
     private void startMovieDownload(String name, String source) {
-        ArrayList<String> qualityNames = new ArrayList<>();
-        ArrayList<String> qualityUrls = new ArrayList<>();
-        String wanted = normalizeMovieTitle(name);
-        for (int i = 0; i < allNames.size() && i < allUrls.size(); i++) {
-            if (normalizeMovieTitle(allNames.get(i)).equals(wanted)
-                    && allUrls.get(i) != null && !allUrls.get(i).trim().isEmpty()) {
-                if (!qualityUrls.contains(allUrls.get(i))) {
-                    qualityNames.add(allNames.get(i));
-                    qualityUrls.add(allUrls.get(i));
-                }
-            }
-        }
-        if (qualityUrls.size() > 1) {
-            String[] options = qualityNames.toArray(new String[0]);
-            new AlertDialog.Builder(this)
-                    .setTitle("اختيار جودة التنزيل")
-                    .setItems(options, (dialog, which) -> beginMovieDownload(qualityNames.get(which), qualityUrls.get(which)))
-                    .setNegativeButton("إلغاء", null)
-                    .show();
+        // The playlist can contain thousands of entries. Never scan and normalize
+        // every title on the UI thread when the user taps Download.
+        if (source == null || source.trim().isEmpty()) {
+            Toast.makeText(this, "رابط التنزيل غير متاح", Toast.LENGTH_LONG).show();
             return;
         }
-        beginMovieDownload(name, source);
+
+        final ArrayList<String> snapshotNames = new ArrayList<>(allNames);
+        final ArrayList<String> snapshotUrls = new ArrayList<>(allUrls);
+
+        ProgressDialog checking = new ProgressDialog(this);
+        checking.setTitle("اختيار جودة التنزيل");
+        checking.setMessage("جاري البحث عن الجودات المتاحة...");
+        checking.setIndeterminate(true);
+        checking.setCancelable(true);
+        checking.show();
+
+        Thread qualityLookup = new Thread(() -> {
+            ArrayList<String> qualityNames = new ArrayList<>();
+            ArrayList<String> qualityUrls = new ArrayList<>();
+            String wanted = normalizeMovieTitle(name);
+
+            for (int i = 0; i < snapshotNames.size() && i < snapshotUrls.size(); i++) {
+                if (Thread.currentThread().isInterrupted()) return;
+                String candidateUrl = snapshotUrls.get(i);
+                if (candidateUrl == null || candidateUrl.trim().isEmpty()) continue;
+                if (normalizeMovieTitle(snapshotNames.get(i)).equals(wanted)
+                        && !qualityUrls.contains(candidateUrl)) {
+                    qualityNames.add(snapshotNames.get(i));
+                    qualityUrls.add(candidateUrl);
+                }
+            }
+
+            runOnUiThread(() -> {
+                if (isFinishing() || isDestroyed()) {
+                    if (checking.isShowing()) checking.dismiss();
+                    return;
+                }
+                if (checking.isShowing()) checking.dismiss();
+
+                if (qualityUrls.size() > 1) {
+                    String[] options = qualityNames.toArray(new String[0]);
+                    new AlertDialog.Builder(this)
+                            .setTitle("اختيار جودة التنزيل")
+                            .setItems(options, (dialog, which) ->
+                                    beginMovieDownload(qualityNames.get(which), qualityUrls.get(which)))
+                            .setNegativeButton("إلغاء", null)
+                            .show();
+                } else {
+                    beginMovieDownload(name, source);
+                }
+            });
+        }, "download-quality-lookup");
+        qualityLookup.start();
     }
 
     private String normalizeMovieTitle(String name) {
