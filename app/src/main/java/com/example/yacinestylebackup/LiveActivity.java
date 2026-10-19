@@ -431,6 +431,39 @@ public class LiveActivity extends ComponentActivity {
     }
 
     private void startMovieDownload(String name, String source) {
+        ArrayList<String> qualityNames = new ArrayList<>();
+        ArrayList<String> qualityUrls = new ArrayList<>();
+        String wanted = normalizeMovieTitle(name);
+        for (int i = 0; i < allNames.size() && i < allUrls.size(); i++) {
+            if (normalizeMovieTitle(allNames.get(i)).equals(wanted)
+                    && allUrls.get(i) != null && !allUrls.get(i).trim().isEmpty()) {
+                if (!qualityUrls.contains(allUrls.get(i))) {
+                    qualityNames.add(allNames.get(i));
+                    qualityUrls.add(allUrls.get(i));
+                }
+            }
+        }
+        if (qualityUrls.size() > 1) {
+            String[] options = qualityNames.toArray(new String[0]);
+            new AlertDialog.Builder(this)
+                    .setTitle("اختيار جودة التنزيل")
+                    .setItems(options, (dialog, which) -> beginMovieDownload(qualityNames.get(which), qualityUrls.get(which)))
+                    .setNegativeButton("إلغاء", null)
+                    .show();
+            return;
+        }
+        beginMovieDownload(name, source);
+    }
+
+    private String normalizeMovieTitle(String name) {
+        if (name == null) return "";
+        return name.toLowerCase(java.util.Locale.ROOT)
+                .replaceAll("(?i)\\b(4k|2160p|1080p|720p|480p|360p|fhd|hd|sd|low|high|web[- ]?dl|bluray|blu[- ]?ray)\\b", " ")
+                .replaceAll("[^\\p{L}\\p{N}]", " ")
+                .replaceAll("\\s+", " ").trim();
+    }
+
+    private void beginMovieDownload(String name, String source) {
         if (downloadThread != null && downloadThread.isAlive()) {
             Toast.makeText(this, "يوجد تنزيل جارٍ بالفعل", Toast.LENGTH_SHORT).show();
             return;
@@ -493,26 +526,45 @@ public class LiveActivity extends ComponentActivity {
                     if (downloadDialog != null) {
                         downloadDialog.setIndeterminate(contentLength <= 0);
                         downloadDialog.setMax(1000);
-                        downloadDialog.setMessage("جاري تنزيل الفيلم...");
+                        downloadDialog.setMessage("تم تنزيل 0.00 MB"
+                                + (contentLength > 0 ? " من " + formatMegabytes(contentLength) + " MB" : "")
+                                + "\nالسرعة: حساب السرعة...");
                     }
                 });
                 long copied = 0;
-                byte[] buffer = new byte[64 * 1024];
-                long lastUi = 0;
-                try (InputStream in = new BufferedInputStream(conn.getInputStream());
-                     BufferedOutputStream out = new BufferedOutputStream(new FileOutputStream(partial))) {
+                long lastUi = android.os.SystemClock.elapsedRealtime();
+                long lastBytes = 0;
+                // Larger buffers can reduce I/O overhead; actual speed still depends on the server/network.
+                byte[] buffer = new byte[256 * 1024];
+                try (InputStream in = new BufferedInputStream(conn.getInputStream(), 256 * 1024);
+                     BufferedOutputStream out = new BufferedOutputStream(new FileOutputStream(partial), 256 * 1024)) {
                     int n;
                     while ((n = in.read(buffer)) != -1) {
                         if (downloadCancelled || Thread.currentThread().isInterrupted()) throw new InterruptedException();
                         out.write(buffer, 0, n);
                         copied += n;
                         long now = android.os.SystemClock.elapsedRealtime();
-                        if (contentLength > 0 && now - lastUi > 250) {
+                        if (now - lastUi >= 500) {
+                            long elapsed = Math.max(1, now - lastUi);
+                            final long speed = Math.max(0, (copied - lastBytes) * 1000L / elapsed);
                             lastUi = now;
-                            int progress = (int) Math.min(1000, copied * 1000L / contentLength);
-                            runOnUiThread(() -> { if (downloadDialog != null) downloadDialog.setProgress(progress); });
+                            lastBytes = copied;
+                            final long doneBytes = copied;
+                            final int progress = contentLength > 0
+                                    ? (int) Math.min(1000, doneBytes * 1000L / contentLength) : 0;
+                            final String message = "تم تنزيل " + formatMegabytes(doneBytes) + " MB"
+                                    + (contentLength > 0 ? " من " + formatMegabytes(contentLength) + " MB" : "")
+                                    + "\nالسرعة: " + formatMegabytes(speed) + " MB/s";
+                            runOnUiThread(() -> {
+                                if (downloadDialog != null) {
+                                    downloadDialog.setIndeterminate(contentLength <= 0);
+                                    if (contentLength > 0) downloadDialog.setProgress(progress);
+                                    downloadDialog.setMessage(message);
+                                }
+                            });
                         }
                     }
+                    out.flush();
                 }
                 if (downloadCancelled) throw new InterruptedException();
                 File finalTarget = target;
@@ -585,6 +637,10 @@ public class LiveActivity extends ComponentActivity {
             }
             return false;
         }
+    }
+
+    private String formatMegabytes(long bytes) {
+        return String.format(java.util.Locale.US, "%.2f", bytes / (1024.0 * 1024.0));
     }
 
     private void closeDownloadDialog() {
