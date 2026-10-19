@@ -21,7 +21,7 @@ import android.widget.FrameLayout;
 import android.widget.ListView;
 import android.widget.ProgressBar;
 import android.app.ProgressDialog;
-import android.widget.ProgressDialog;
+import android.app.ProgressDialog;
 import android.widget.SearchView;
 import android.widget.TextView;
 import android.widget.Toast;
