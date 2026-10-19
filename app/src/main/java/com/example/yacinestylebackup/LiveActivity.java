@@ -123,6 +123,14 @@ public class LiveActivity extends ComponentActivity {
                 TextView itemName = row.findViewById(R.id.channelName);
                 Button downloadButton = row.findViewById(R.id.downloadItemButton);
                 itemName.setText(getItem(position));
+                final int itemPosition = position;
+                itemName.setOnClickListener(itemView -> {
+                    if (itemPosition >= 0 && itemPosition < urls.size()) {
+                        currentIndex = itemPosition;
+                        retryCount = 0;
+                        playCurrent();
+                    }
+                });
                 downloadButton.setOnClickListener(v -> {
                     if (position >= 0 && position < urls.size() && position < names.size()) {
                         startMovieDownload(names.get(position), urls.get(position));
