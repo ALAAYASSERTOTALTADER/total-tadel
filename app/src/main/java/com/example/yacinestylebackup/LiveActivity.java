@@ -4,6 +4,8 @@ import android.content.res.Configuration;
 import android.app.AlertDialog;
 
 import android.content.SharedPreferences;
+import android.content.ContentValues;
+import android.provider.MediaStore;
 import android.os.Environment;
 import android.content.pm.ActivityInfo;
 import android.net.Uri;
@@ -39,6 +41,8 @@ import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.FileInputStream;
+import java.io.OutputStream;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
@@ -514,9 +518,13 @@ public class LiveActivity extends ComponentActivity {
                 File finalTarget = target;
                 if (target.exists() && !target.delete()) throw new java.io.IOException("تعذر استبدال الملف الموجود");
                 if (!partial.renameTo(finalTarget)) throw new java.io.IOException("تعذر حفظ الفيلم");
+                boolean visibleInDownloads = publishToPublicDownloads(finalTarget);
                 runOnUiThread(() -> {
                     closeDownloadDialog();
-                    Toast.makeText(this, "اكتمل تنزيل الفيلم: " + finalTarget.getName(), Toast.LENGTH_LONG).show();
+                    String message = visibleInDownloads
+                            ? "اكتمل تنزيل الفيلم في Download/TOTAL TADER: " + finalTarget.getName()
+                            : "اكتمل التنزيل داخل التطبيق، لكن تعذر نسخه إلى مجلد Download: " + finalTarget.getName();
+                    Toast.makeText(this, message, Toast.LENGTH_LONG).show();
                 });
             } catch (InterruptedException e) {
                 if (partial != null && partial.exists()) partial.delete();
@@ -530,6 +538,53 @@ public class LiveActivity extends ComponentActivity {
             }
         }, "movie-download");
         downloadThread.start();
+    }
+
+
+    // Publish a completed video to the user's public Downloads folder on Android 10+.
+    private boolean publishToPublicDownloads(File source) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            return false;
+        }
+
+        String lowerName = source.getName().toLowerCase(java.util.Locale.ROOT);
+        String mime = "video/*";
+        if (lowerName.endsWith(".mkv")) mime = "video/x-matroska";
+        else if (lowerName.endsWith(".mp4") || lowerName.endsWith(".m4v")) mime = "video/mp4";
+        else if (lowerName.endsWith(".avi")) mime = "video/x-msvideo";
+        else if (lowerName.endsWith(".webm")) mime = "video/webm";
+        else if (lowerName.endsWith(".mov")) mime = "video/quicktime";
+
+        ContentValues values = new ContentValues();
+        values.put(MediaStore.MediaColumns.DISPLAY_NAME, source.getName());
+        values.put(MediaStore.MediaColumns.MIME_TYPE, mime);
+        values.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/TOTAL TADER");
+        values.put(MediaStore.MediaColumns.IS_PENDING, 1);
+
+        Uri destination = null;
+        try {
+            destination = getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
+            if (destination == null) return false;
+
+            try (InputStream in = new BufferedInputStream(new FileInputStream(source));
+                 OutputStream out = getContentResolver().openOutputStream(destination, "w")) {
+                if (out == null) throw new java.io.IOException("تعذر فتح ملف التنزيلات");
+                byte[] buffer = new byte[64 * 1024];
+                int count;
+                while ((count = in.read(buffer)) != -1) out.write(buffer, 0, count);
+                out.flush();
+            }
+
+            ContentValues ready = new ContentValues();
+            ready.put(MediaStore.MediaColumns.IS_PENDING, 0);
+            getContentResolver().update(destination, ready, null, null);
+            return true;
+        } catch (Exception e) {
+            if (destination != null) {
+                try { getContentResolver().delete(destination, null, null); } catch (Exception ignored) { }
+            }
+            return false;
+        }
     }
 
     private void closeDownloadDialog() {
