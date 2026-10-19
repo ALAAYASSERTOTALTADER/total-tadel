@@ -1,8 +1,10 @@
 package com.example.yacinestylebackup;
 
 import android.content.res.Configuration;
+import android.app.AlertDialog;
 
 import android.content.SharedPreferences;
+import android.os.Environment;
 import android.content.pm.ActivityInfo;
 import android.net.Uri;
 import android.os.Bundle;
@@ -18,6 +20,7 @@ import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.ListView;
 import android.widget.ProgressBar;
+import android.widget.ProgressDialog;
 import android.widget.SearchView;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -32,6 +35,13 @@ import androidx.media3.ui.PlayerView;
 import androidx.media3.ui.TrackSelectionDialogBuilder;
 
 import java.io.BufferedReader;
+import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -69,6 +79,9 @@ public class LiveActivity extends ComponentActivity {
     private String activeChannelName;
     private String activeChannelUrl;
     private int playbackGeneration = 0;
+    private volatile boolean downloadCancelled = false;
+    private Thread downloadThread;
+    private ProgressDialog downloadDialog;
 
     @Override
     protected void onCreate(Bundle b) {
@@ -93,7 +106,9 @@ public class LiveActivity extends ComponentActivity {
         Button retry = findViewById(R.id.retryButton);
         Button lock = findViewById(R.id.lockButton);
         Button refresh = findViewById(R.id.refreshButton);
+        Button downloads = findViewById(R.id.downloadsButton);
         SearchView search = findViewById(R.id.searchChannels);
+        downloads.setOnClickListener(v -> showDownloads());
 
         sectionTitle.setText(favoritesOnly ? "⭐ المفضلة" : (selectedCategory == null ? "📺 كل القنوات" : "📁 " + selectedCategory));
 
@@ -107,6 +122,19 @@ public class LiveActivity extends ComponentActivity {
                 retryCount = 0;
                 playCurrent();
             }
+        });
+        channelList.setOnItemLongClickListener((parent, view, pos, id) -> {
+            if (pos >= 0 && pos < urls.size()) {
+                currentIndex = pos;
+                new AlertDialog.Builder(this)
+                        .setTitle(names.get(pos))
+                        .setMessage("هل تريد تنزيل هذا الفيلم على الجهاز؟")
+                        .setPositiveButton("تنزيل", (dialog, which) -> startMovieDownload(names.get(pos), urls.get(pos)))
+                        .setNegativeButton("إلغاء", null)
+                        .show();
+                return true;
+            }
+            return false;
         });
 
         quality.setOnClickListener(v -> showQualitySelector());
@@ -406,6 +434,164 @@ public class LiveActivity extends ComponentActivity {
         prefs.edit().putStringSet("favorite_channels", saved).apply();
         if (channelsLoaded) applyChannelFilter(selectedCategory);
     }
+    private File downloadsDirectory() {
+        File base = getExternalFilesDir(Environment.DIRECTORY_MOVIES);
+        if (base == null) base = new File(getFilesDir(), "movies");
+        if (!base.exists()) base.mkdirs();
+        return base;
+    }
+
+    private String safeFileName(String name) {
+        String cleaned = name == null ? "movie" : name.replaceAll("[\\\\/:*?\"<>|\\\\r\\\\n]", "_").trim();
+        if (cleaned.isEmpty()) cleaned = "movie";
+        if (cleaned.length() > 100) cleaned = cleaned.substring(0, 100);
+        return cleaned;
+    }
+
+    private void startMovieDownload(String name, String source) {
+        if (downloadThread != null && downloadThread.isAlive()) {
+            Toast.makeText(this, "يوجد تنزيل جارٍ بالفعل", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if (source == null || !(source.startsWith("http://") || source.startsWith("https://"))) {
+            Toast.makeText(this, "رابط التنزيل غير مدعوم", Toast.LENGTH_LONG).show();
+            return;
+        }
+        String lower = source.toLowerCase(java.util.Locale.ROOT);
+        if (lower.contains(".m3u8") || lower.contains(".mpd") || lower.contains("/live/") || lower.contains("/movie/") == false && (lower.contains("/live") || lower.contains("playlist"))) {
+            Toast.makeText(this, "يبدو أن هذا رابط بث مباشر وليس ملف فيلم قابلًا للتنزيل", Toast.LENGTH_LONG).show();
+            return;
+        }
+
+        downloadCancelled = false;
+        downloadDialog = new ProgressDialog(this);
+        downloadDialog.setTitle("تنزيل " + name);
+        downloadDialog.setMessage("جاري التحقق من رابط الفيلم...");
+        downloadDialog.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
+        downloadDialog.setIndeterminate(true);
+        downloadDialog.setCancelable(false);
+        downloadDialog.setButton(ProgressDialog.BUTTON_NEGATIVE, "إلغاء", (dialog, which) -> {
+            downloadCancelled = true;
+            if (downloadThread != null) downloadThread.interrupt();
+        });
+        downloadDialog.show();
+
+        downloadThread = new Thread(() -> {
+            HttpURLConnection connection = null;
+            File partial = null;
+            try {
+                URL url = new URL(source);
+                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                connection = conn;
+                conn.setConnectTimeout(15000);
+                conn.setReadTimeout(20000);
+                conn.setInstanceFollowRedirects(true);
+                conn.setRequestProperty("User-Agent", "TotalIPTV/2.1");
+                conn.connect();
+                int code = conn.getResponseCode();
+                if (code < 200 || code >= 300) throw new java.io.IOException("HTTP " + code);
+                String type = conn.getContentType();
+                String disposition = conn.getHeaderField("Content-Disposition");
+                String path = url.getPath() == null ? "" : url.getPath().toLowerCase(java.util.Locale.ROOT);
+                boolean hasFilename = disposition != null && disposition.toLowerCase(java.util.Locale.ROOT).contains("filename");
+                boolean videoMime = type != null && type.toLowerCase(java.util.Locale.ROOT).startsWith("video/");
+                boolean genericDownloadMime = type != null && type.toLowerCase(java.util.Locale.ROOT).contains("application/octet-stream");
+                boolean knownVideo = path.matches(".*\\.(mp4|mkv|avi|mov|webm|m4v|wmv|flv)$")
+                        || (hasFilename && (videoMime || genericDownloadMime));
+                if (!knownVideo && (type == null || !type.toLowerCase(java.util.Locale.ROOT).startsWith("video/"))) {
+                    throw new java.io.IOException("الرابط لا يبدو ملف فيديو مباشرًا؛ روابط البث M3U8 غير مدعومة للتنزيل");
+                }
+                long total = conn.getContentLengthLong();
+                String ext = ".mp4";
+                if (path.matches(".*\\.(mp4|mkv|avi|mov|webm|m4v|wmv|flv)$")) ext = path.substring(path.lastIndexOf('.'));
+                File target = new File(downloadsDirectory(), safeFileName(name) + ext);
+                partial = new File(target.getAbsolutePath() + ".part");
+                final long contentLength = total;
+                runOnUiThread(() -> {
+                    if (downloadDialog != null) {
+                        downloadDialog.setIndeterminate(contentLength <= 0);
+                        downloadDialog.setMax(1000);
+                        downloadDialog.setMessage("جاري تنزيل الفيلم...");
+                    }
+                });
+                long copied = 0;
+                byte[] buffer = new byte[64 * 1024];
+                long lastUi = 0;
+                try (InputStream in = new BufferedInputStream(conn.getInputStream());
+                     BufferedOutputStream out = new BufferedOutputStream(new FileOutputStream(partial))) {
+                    int n;
+                    while ((n = in.read(buffer)) != -1) {
+                        if (downloadCancelled || Thread.currentThread().isInterrupted()) throw new InterruptedException();
+                        out.write(buffer, 0, n);
+                        copied += n;
+                        long now = android.os.SystemClock.elapsedRealtime();
+                        if (contentLength > 0 && now - lastUi > 250) {
+                            lastUi = now;
+                            int progress = (int) Math.min(1000, copied * 1000L / contentLength);
+                            runOnUiThread(() -> { if (downloadDialog != null) downloadDialog.setProgress(progress); });
+                        }
+                    }
+                }
+                if (downloadCancelled) throw new InterruptedException();
+                File finalTarget = target;
+                if (target.exists() && !target.delete()) throw new java.io.IOException("تعذر استبدال الملف الموجود");
+                if (!partial.renameTo(finalTarget)) throw new java.io.IOException("تعذر حفظ الفيلم");
+                runOnUiThread(() -> {
+                    closeDownloadDialog();
+                    Toast.makeText(this, "اكتمل تنزيل الفيلم: " + finalTarget.getName(), Toast.LENGTH_LONG).show();
+                });
+            } catch (InterruptedException e) {
+                if (partial != null && partial.exists()) partial.delete();
+                runOnUiThread(() -> { closeDownloadDialog(); Toast.makeText(this, "تم إلغاء التنزيل", Toast.LENGTH_SHORT).show(); });
+            } catch (Exception e) {
+                if (partial != null && partial.exists()) partial.delete();
+                String message = e.getMessage() == null ? "فشل تنزيل الفيلم" : e.getMessage();
+                runOnUiThread(() -> { closeDownloadDialog(); Toast.makeText(this, message, Toast.LENGTH_LONG).show(); });
+            } finally {
+                if (connection != null) connection.disconnect();
+            }
+        }, "movie-download");
+        downloadThread.start();
+    }
+
+    private void closeDownloadDialog() {
+        if (downloadDialog != null) {
+            if (downloadDialog.isShowing()) downloadDialog.dismiss();
+            downloadDialog = null;
+        }
+    }
+
+    private void showDownloads() {
+        File[] files = downloadsDirectory().listFiles((dir, name) -> !name.endsWith(".part") && !name.endsWith(".tmp"));
+        if (files == null || files.length == 0) {
+            new AlertDialog.Builder(this).setTitle("تحميلاتي").setMessage("لا توجد أفلام محمّلة حتى الآن. اضغط مطولًا على عنصر في القائمة واختر تنزيل.").setPositiveButton("حسنًا", null).show();
+            return;
+        }
+        java.util.Arrays.sort(files, (a, b) -> Long.compare(b.lastModified(), a.lastModified()));
+        String[] labels = new String[files.length];
+        for (int i = 0; i < files.length; i++) labels[i] = files[i].getName() + "  •  " + android.text.format.Formatter.formatShortFileSize(this, files[i].length());
+        new AlertDialog.Builder(this).setTitle("تحميلاتي").setItems(labels, (dialog, which) -> {
+            File chosen = files[which];
+            new AlertDialog.Builder(this).setTitle(chosen.getName()).setItems(new String[]{"تشغيل دون إنترنت", "حذف"}, (d, action) -> {
+                if (action == 0) {
+                    activeChannelName = chosen.getName();
+                    activeChannelUrl = Uri.fromFile(chosen).toString();
+                    final int generation = ++playbackGeneration;
+                    status.setText("تشغيل محلي: " + activeChannelName);
+                    if (player == null) {
+                        player = new ExoPlayer.Builder(this).build();
+                        playerView.setPlayer(player);
+                    }
+                    player.setMediaItem(MediaItem.fromUri(Uri.fromFile(chosen)));
+                    player.prepare();
+                    player.play();
+                } else if (chosen.delete()) {
+                    Toast.makeText(this, "تم حذف الملف", Toast.LENGTH_SHORT).show();
+                } else Toast.makeText(this, "تعذر حذف الملف", Toast.LENGTH_SHORT).show();
+            }).show();
+        }).show();
+    }
+
     private void showQualitySelector() {
         if (player == null) {
             Toast.makeText(this, "شغّل قناة أولاً", Toast.LENGTH_SHORT).show();
@@ -486,8 +672,14 @@ public class LiveActivity extends ComponentActivity {
 
     @Override
     protected void onDestroy() {
+        downloadCancelled = true;
+        if (downloadThread != null) downloadThread.interrupt();
+        closeDownloadDialog();
         handler.removeCallbacksAndMessages(null);
-        if (player != null) player.release();
+        if (player != null) {
+            player.release();
+            player = null;
+        }
         super.onDestroy();
     }
 

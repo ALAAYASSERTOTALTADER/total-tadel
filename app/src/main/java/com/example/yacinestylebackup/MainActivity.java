@@ -206,8 +206,25 @@ public class MainActivity extends ComponentActivity {
 
     private void buildCategoryFolders() {
         categoryContainer.removeAllViews();
-        ArrayList<String> cats = readCategories();
+        // The bundled playlist is large; never scan it on the UI thread.
+        TextView loadingText = new TextView(this);
+        loadingText.setText("جاري تجهيز الأقسام...");
+        loadingText.setTextColor(Color.WHITE);
+        loadingText.setGravity(Gravity.CENTER);
+        categoryContainer.addView(loadingText);
+        java.util.concurrent.ExecutorService executor = java.util.concurrent.Executors.newSingleThreadExecutor();
+        executor.execute(() -> {
+            ArrayList<String> cats = readCategories();
+            runOnUiThread(() -> {
+                if (isFinishing() || isDestroyed()) return;
+                categoryContainer.removeAllViews();
+                buildCategoryFolderViews(cats);
+            });
+            executor.shutdown();
+        });
+    }
 
+    private void buildCategoryFolderViews(ArrayList<String> cats) {
         for (int i = 0; i < cats.size(); i += 2) {
             LinearLayout row = new LinearLayout(this);
             row.setOrientation(LinearLayout.HORIZONTAL);

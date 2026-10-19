@@ -24,6 +24,7 @@
             <Button android:id="@+id/favoriteButton" android:layout_width="wrap_content" android:layout_height="44dp" android:text="⭐ مفضلة" android:textColor="#FFFFFF" android:textSize="12sp" android:backgroundTint="#7A00FF"/>
             <Button android:id="@+id/lockButton" android:layout_width="wrap_content" android:layout_height="44dp" android:text="🔓 قفل" android:textColor="#FFFFFF" android:textSize="12sp" android:backgroundTint="#7A00FF"/>
             <Button android:id="@+id/retryButton" android:layout_width="wrap_content" android:layout_height="44dp" android:text="↻ إعادة الاتصال" android:textColor="#FFFFFF" android:textSize="12sp" android:backgroundTint="#7A00FF"/>
+            <Button android:id="@+id/downloadsButton" android:layout_width="wrap_content" android:layout_height="44dp" android:text="⬇ تحميلاتي" android:textColor="#FFFFFF" android:textSize="12sp" android:backgroundTint="#7A00FF"/>
         </LinearLayout>
     </HorizontalScrollView>
 
