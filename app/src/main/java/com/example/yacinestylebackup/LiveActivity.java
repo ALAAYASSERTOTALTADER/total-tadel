@@ -290,13 +290,7 @@ public class LiveActivity extends ComponentActivity {
 
     private void updateMovieDownloadVisibility() {
         if (downloadMovieButton == null) return;
-        boolean visible = isMovieCategory(selectedCategory);
-        if (currentIndex >= 0 && currentIndex < urls.size() && isLiveStreamUrl(urls.get(currentIndex))) {
-            visible = false;
-        } else if (!visible && currentIndex >= 0 && currentIndex < urls.size()) {
-            visible = isMovieName(names.get(currentIndex)) || isMovieUrl(urls.get(currentIndex));
-        }
-        downloadMovieButton.setVisibility(visible ? View.VISIBLE : View.GONE);
+        downloadMovieButton.setVisibility(View.VISIBLE);
     }
 
     private void downloadCurrentMovie() {
@@ -432,19 +426,32 @@ public class LiveActivity extends ComponentActivity {
         player.play();
     }
 
+    private ArrayList<String> allChannelNames;
+    private ArrayList<String> allChannelUrls;
+    private boolean channelCacheReady = false;
+
     private void filterChannels(String query) {
-        String q = query == null ? "" : query.trim().toLowerCase();
+        if (!channelCacheReady) {
+            allChannelNames = new ArrayList<>(names);
+            allChannelUrls = new ArrayList<>(urls);
+            channelCacheReady = true;
+        }
+
+        String q = query == null ? "" :
+                query.trim().toLowerCase(java.util.Locale.ROOT);
+
         names.clear();
         urls.clear();
-        loadChannels(selectedCategory);
-        if (!q.isEmpty()) {
-            for (int i = names.size() - 1; i >= 0; i--) {
-                if (!names.get(i).toLowerCase().contains(q)) {
-                    names.remove(i);
-                    urls.remove(i);
-                }
+
+        for (int i = 0; i < allChannelNames.size(); i++) {
+            String name = allChannelNames.get(i);
+            if (q.isEmpty() ||
+                    name.toLowerCase(java.util.Locale.ROOT).contains(q)) {
+                names.add(name);
+                urls.add(allChannelUrls.get(i));
             }
         }
+
         currentIndex = -1;
         updateMovieDownloadVisibility();
         channelAdapter.notifyDataSetChanged();
