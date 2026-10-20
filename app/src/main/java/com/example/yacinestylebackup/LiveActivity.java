@@ -210,8 +210,8 @@ public class LiveActivity extends ComponentActivity {
                 prefs.getStringSet("favorite_channels", new HashSet<>()));
 
         status.setText(forceRefresh
-                ? "جاري تحديث قاعدة بيانات القنوات..."
-                : "جاري تحميل القنوات...");
+                ? "Please wait, updating channel database..."
+                : "Please wait, loading channels...");
 
         channelExecutor.execute(() -> {
             try {

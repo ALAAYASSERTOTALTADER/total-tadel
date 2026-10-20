@@ -16,6 +16,7 @@ import android.view.View;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.activity.ComponentActivity;
 import androidx.core.app.ActivityCompat;
@@ -43,6 +44,10 @@ public class MainActivity extends ComponentActivity {
     private View gateScreen, homeContent, infoContent;
     private TextView pageTitle, pageBody;
     private LinearLayout categoryContainer;
+    private TextView categoryLoadingText;
+    private final ArrayList<String> loadedCategories = new ArrayList<>();
+    private boolean categoriesLoaded = false;
+    private String pendingSection = null;
 
     @Override
     protected void onCreate(Bundle b) {
@@ -56,12 +61,17 @@ public class MainActivity extends ComponentActivity {
         pageTitle = findViewById(R.id.pageTitle);
         pageBody = findViewById(R.id.pageBody);
         categoryContainer = findViewById(R.id.categoryContainer);
+        categoryLoadingText = findViewById(R.id.categoryLoadingText);
 
         prefs = getSharedPreferences("legend", MODE_PRIVATE);
 
         findViewById(R.id.menuBtn).setOnClickListener(v -> drawer.openDrawer(Gravity.START));
         findViewById(R.id.allChannelsBtn).setOnClickListener(v -> openLive(null));
         findViewById(R.id.lastChannelBtn).setOnClickListener(v -> openLastChannel());
+        findViewById(R.id.liveSectionBtn).setOnClickListener(v -> openLive(null));
+        findViewById(R.id.moviesSectionBtn).setOnClickListener(v -> openSectionCategory("movies"));
+        findViewById(R.id.seriesSectionBtn).setOnClickListener(v -> openSectionCategory("series"));
+        findViewById(R.id.radioSectionBtn).setOnClickListener(v -> openSectionCategory("radio"));
         findViewById(R.id.channelsItem).setOnClickListener(v -> showHome());
         findViewById(R.id.liveItem).setOnClickListener(v -> openLive(null));
         findViewById(R.id.homeItem).setOnClickListener(v -> showHome());
@@ -206,10 +216,81 @@ public class MainActivity extends ComponentActivity {
 
     private void buildCategoryFolders() {
         categoryContainer.removeAllViews();
+        categoriesLoaded = false;
+        categoryLoadingText.setText("Please wait, loading categories...");
+        categoryLoadingText.setVisibility(View.VISIBLE);
+
         new Thread(() -> {
             ArrayList<String> cats = readCategories();
-            runOnUiThread(() -> buildCategoryFolders(cats));
+            runOnUiThread(() -> {
+                loadedCategories.clear();
+                loadedCategories.addAll(cats);
+                categoriesLoaded = true;
+                buildCategoryFolders(cats);
+
+                if (cats.isEmpty()) {
+                    categoryLoadingText.setText("No categories found.");
+                    categoryLoadingText.setVisibility(View.VISIBLE);
+                } else {
+                    categoryLoadingText.setVisibility(View.GONE);
+                }
+
+                String requested = pendingSection;
+                pendingSection = null;
+                if (requested != null) {
+                    openSectionCategory(requested);
+                }
+            });
         }, "CategoryLoader").start();
+    }
+
+    private void openSectionCategory(String section) {
+        if (!categoriesLoaded) {
+            pendingSection = section;
+            categoryLoadingText.setText("Please wait, loading categories...");
+            categoryLoadingText.setVisibility(View.VISIBLE);
+            Toast.makeText(this, "Please wait, loading categories...",
+                    Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        String match = null;
+        for (String category : loadedCategories) {
+            String c = category.toLowerCase(java.util.Locale.ROOT);
+            boolean found;
+
+            if ("movies".equals(section)) {
+                found = c.contains("movie") || c.contains("film")
+                        || c.contains("cinema") || c.contains("vod")
+                        || c.contains("أفلام") || c.contains("افلام")
+                        || c.contains("فيلم") || c.contains("سينما");
+            } else if ("series".equals(section)) {
+                found = c.contains("series") || c.contains("drama")
+                        || c.contains("مسلسلات") || c.contains("مسلسل")
+                        || c.contains("دراما");
+            } else {
+                found = c.contains("radio") || c.contains("راديو")
+                        || c.contains("إذاعة") || c.contains("اذاع")
+                        || c.contains("fm");
+            }
+
+            if (found) {
+                match = category;
+                break;
+            }
+        }
+
+        if (match == null) {
+            String message = "movies".equals(section)
+                    ? "No movies category found."
+                    : "series".equals(section)
+                    ? "No series category found."
+                    : "No radio category found.";
+            Toast.makeText(this, message, Toast.LENGTH_LONG).show();
+            return;
+        }
+
+        openLive(match);
     }
 
     private void buildCategoryFolders(ArrayList<String> cats) {

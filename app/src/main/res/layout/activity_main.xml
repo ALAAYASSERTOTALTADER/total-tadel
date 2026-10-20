@@ -150,6 +150,16 @@
                             android:gravity="end"
                             android:layout_marginBottom="10dp" />
 
+                        <TextView
+                            android:id="@+id/categoryLoadingText"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="Please wait, loading categories..."
+                            android:textColor="#B9B7C9"
+                            android:textSize="14sp"
+                            android:gravity="center"
+                            android:layout_marginBottom="8dp" />
+
                         <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
