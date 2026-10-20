@@ -68,7 +68,7 @@ public class MainActivity extends ComponentActivity {
         findViewById(R.id.menuBtn).setOnClickListener(v -> drawer.openDrawer(Gravity.START));
         findViewById(R.id.allChannelsBtn).setOnClickListener(v -> openLive(null));
         findViewById(R.id.lastChannelBtn).setOnClickListener(v -> openLastChannel());
-        findViewById(R.id.liveSectionBtn).setOnClickListener(v -> openLive(null));
+        findViewById(R.id.liveSectionBtn).setOnClickListener(v -> openSectionCategory("live"));
         findViewById(R.id.moviesSectionBtn).setOnClickListener(v -> openSectionCategory("movies"));
         findViewById(R.id.seriesSectionBtn).setOnClickListener(v -> openSectionCategory("series"));
         findViewById(R.id.radioSectionBtn).setOnClickListener(v -> openSectionCategory("radio"));
@@ -254,10 +254,11 @@ public class MainActivity extends ComponentActivity {
             return;
         }
 
-        String match = null;
+        ArrayList<String> matches = new ArrayList<>();
+
         for (String category : loadedCategories) {
             String c = category.toLowerCase(java.util.Locale.ROOT);
-            boolean found;
+            boolean found = false;
 
             if ("movies".equals(section)) {
                 found = c.contains("movie") || c.contains("film")
@@ -267,30 +268,39 @@ public class MainActivity extends ComponentActivity {
             } else if ("series".equals(section)) {
                 found = c.contains("series") || c.contains("drama")
                         || c.contains("مسلسلات") || c.contains("مسلسل")
-                        || c.contains("دراما");
-            } else {
+                        || c.contains("دراما") || c.contains("ramadan")
+                        || c.contains("رمضان") || c.contains("netflix")
+                        || c.contains("turkish") || c.contains("asian")
+                        || c.contains("kides") || c.contains("kids");
+            } else if ("radio".equals(section)) {
                 found = c.contains("radio") || c.contains("راديو")
                         || c.contains("إذاعة") || c.contains("اذاع")
                         || c.contains("fm");
+            } else if ("live".equals(section)) {
+                found = c.contains("sport") || c.contains("bein")
+                        || c.contains("live") || c.contains("مباشر")
+                        || c.contains("رياض") || c.contains("news")
+                        || c.contains("أخبار") || c.contains("اخبار")
+                        || c.contains("egypt") || c.contains("saudi")
+                        || c.contains("ksa") || c.contains("قنوات")
+                        || c.contains("iptv");
             }
 
-            if (found) {
-                match = category;
-                break;
-            }
+            if (found) matches.add(category);
         }
 
-        if (match == null) {
-            String message = "movies".equals(section)
-                    ? "No movies category found."
-                    : "series".equals(section)
-                    ? "No series category found."
-                    : "No radio category found.";
-            Toast.makeText(this, message, Toast.LENGTH_LONG).show();
+        if (matches.isEmpty()) {
+            Toast.makeText(this, "No matching categories found.",
+                    Toast.LENGTH_LONG).show();
             return;
         }
 
-        openLive(match);
+        String[] items = matches.toArray(new String[0]);
+        new AlertDialog.Builder(this)
+                .setTitle("Select a category")
+                .setItems(items, (dialog, which) -> openLive(items[which]))
+                .setNegativeButton("Cancel", null)
+                .show();
     }
 
     private void buildCategoryFolders(ArrayList<String> cats) {
