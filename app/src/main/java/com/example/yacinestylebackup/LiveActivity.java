@@ -40,6 +40,8 @@ import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class LiveActivity extends ComponentActivity {
     private ExoPlayer player;
@@ -64,12 +66,22 @@ public class LiveActivity extends ComponentActivity {
     private ArrayAdapter<String> channelAdapter;
     private Button downloadMovieButton;
 
+    private ChannelCacheDb channelDb;
+    private final ExecutorService channelExecutor =
+            Executors.newSingleThreadExecutor();
+    private final Handler searchHandler =
+            new Handler(Looper.getMainLooper());
+    private Runnable pendingSearch;
+    private volatile int loadToken = 0;
+    private String currentQuery = "";
+
     @Override
     protected void onCreate(Bundle b) {
         super.onCreate(b);
         setContentView(R.layout.activity_live);
 
         prefs = getSharedPreferences("legend", MODE_PRIVATE);
+        channelDb = new ChannelCacheDb(this);
         selectedCategory = getIntent().getStringExtra("category");
         favoritesOnly = getIntent().getBooleanExtra("favoritesOnly", false);
 
@@ -93,13 +105,10 @@ public class LiveActivity extends ComponentActivity {
 
         sectionTitle.setText(favoritesOnly ? "⭐ المفضلة" : (selectedCategory == null ? "📺 كل القنوات" : "📁 " + selectedCategory));
 
-        loadChannels(selectedCategory);
-        updateMovieDownloadVisibility();
-
         channelAdapter = new ArrayAdapter<>(
                 this, android.R.layout.simple_list_item_1, names);
-
         channelList.setAdapter(channelAdapter);
+        updateMovieDownloadVisibility();
 
         String autoplayName = getIntent().getStringExtra("autoplayName");
         String autoplayUrl = getIntent().getStringExtra("autoplayUrl");
@@ -112,6 +121,8 @@ public class LiveActivity extends ComponentActivity {
             currentIndex = 0;
             updateMovieDownloadVisibility();
             playCurrent();
+        } else {
+            loadChannels(selectedCategory, false);
         }
 
         channelList.setOnItemClickListener((a, v, pos, id) -> {
@@ -139,14 +150,9 @@ public class LiveActivity extends ComponentActivity {
         });
 
         refresh.setOnClickListener(v -> {
-            names.clear();
-            urls.clear();
-            currentIndex = -1;
-            updateMovieDownloadVisibility();
-            loadChannels(selectedCategory);
-            channelAdapter.notifyDataSetChanged();
+            currentQuery = "";
             search.setQuery("", false);
-            status.setText(names.isEmpty() ? "لا توجد قنوات" : "تم تحديث القنوات • اختر قناة");
+            loadChannels(selectedCategory, true);
         });
 
         search.setOnQueryTextListener(new SearchView.OnQueryTextListener() {
@@ -197,52 +203,54 @@ public class LiveActivity extends ComponentActivity {
         return name != null && (name.contains("---") || name.contains("★★") || name.contains("●"));
     }
 
-    private void loadChannels(String wanted) {
-        String currentCategory = "عام";
-        boolean skipNextUrl = false;
+    private void loadChannels(String wanted, boolean forceRefresh) {
+        final int token = ++loadToken;
+        final String query = currentQuery;
+        final Set<String> favoriteNames = new HashSet<>(
+                prefs.getStringSet("favorite_channels", new HashSet<>()));
 
-        try (BufferedReader br = new BufferedReader(
-                new InputStreamReader(getResources().openRawResource(R.raw.channels), java.nio.charset.StandardCharsets.UTF_8))) {
+        status.setText(forceRefresh
+                ? "جاري تحديث قاعدة بيانات القنوات..."
+                : "جاري تحميل القنوات...");
 
-            String line;
-            String pendingName = null;
+        channelExecutor.execute(() -> {
+            try {
+                channelDb.loadFromM3u(
+                        getResources(), R.raw.channels, forceRefresh);
 
-            while ((line = br.readLine()) != null) {
-                line = line.trim();
+                ArrayList<ChannelCacheDb.Channel> result =
+                        channelDb.getChannels(
+                                wanted, query, favoritesOnly, favoriteNames);
 
-                if (line.startsWith("#EXTINF")) {
-                    int comma = findDisplayNameComma(line);
-                    pendingName = comma >= 0 ? line.substring(comma + 1).trim() : null;
+                runOnUiThread(() -> {
+                    if (token != loadToken || isFinishing() || isDestroyed()) return;
 
-                    if (isCategoryHeader(pendingName)) {
-                        currentCategory = cleanCategory(pendingName);
-                        skipNextUrl = true;
-                        pendingName = null;
-                    } else {
-                        skipNextUrl = false;
-                        if (!isValidDisplayName(pendingName)) pendingName = null;
+                    names.clear();
+                    urls.clear();
+
+                    for (ChannelCacheDb.Channel channel : result) {
+                        names.add(channel.name);
+                        urls.add(channel.url);
                     }
 
-                } else if (!line.startsWith("#") && !line.isEmpty()) {
-                    if (skipNextUrl) {
-                        skipNextUrl = false;
-                        continue;
+                    currentIndex = -1;
+                    updateMovieDownloadVisibility();
+                    if (channelAdapter != null) {
+                        channelAdapter.notifyDataSetChanged();
                     }
 
-                    if (pendingName != null) {
-                        boolean categoryOk = wanted == null || wanted.equals(currentCategory);
-                        Set<String> favs = prefs.getStringSet("favorite_channels", new HashSet<>());
-                        boolean favoriteOk = !favoritesOnly || (favs != null && favs.contains(pendingName));
-                        if (categoryOk && favoriteOk) {
-                            names.add(pendingName);
-                            urls.add(line);
-                        }
-                        pendingName = null;
-                    }
-                }
+                    status.setText(names.isEmpty()
+                            ? "لا توجد قنوات في هذا القسم"
+                            : "تم تحميل " + names.size() + " قناة • اختر قناة");
+                });
+            } catch (Exception ex) {
+                runOnUiThread(() -> {
+                    if (token != loadToken || isFinishing() || isDestroyed()) return;
+                    status.setText("تعذر تحميل القنوات");
+                    Toast.makeText(this, "فشل تحميل ملف القنوات", Toast.LENGTH_LONG).show();
+                });
             }
-
-        } catch (Exception ignored) { }
+        });
     }
 
     private boolean isMovieCategory(String category) {
@@ -426,35 +434,15 @@ public class LiveActivity extends ComponentActivity {
         player.play();
     }
 
-    private ArrayList<String> allChannelNames;
-    private ArrayList<String> allChannelUrls;
-    private boolean channelCacheReady = false;
-
     private void filterChannels(String query) {
-        if (!channelCacheReady) {
-            allChannelNames = new ArrayList<>(names);
-            allChannelUrls = new ArrayList<>(urls);
-            channelCacheReady = true;
+        currentQuery = query == null ? "" : query;
+
+        if (pendingSearch != null) {
+            searchHandler.removeCallbacks(pendingSearch);
         }
 
-        String q = query == null ? "" :
-                query.trim().toLowerCase(java.util.Locale.ROOT);
-
-        names.clear();
-        urls.clear();
-
-        for (int i = 0; i < allChannelNames.size(); i++) {
-            String name = allChannelNames.get(i);
-            if (q.isEmpty() ||
-                    name.toLowerCase(java.util.Locale.ROOT).contains(q)) {
-                names.add(name);
-                urls.add(allChannelUrls.get(i));
-            }
-        }
-
-        currentIndex = -1;
-        updateMovieDownloadVisibility();
-        channelAdapter.notifyDataSetChanged();
+        pendingSearch = () -> loadChannels(selectedCategory, false);
+        searchHandler.postDelayed(pendingSearch, 300);
     }
 
     private void toggleFavorite() {
@@ -560,6 +548,8 @@ public class LiveActivity extends ComponentActivity {
     @Override
     protected void onDestroy() {
         handler.removeCallbacksAndMessages(null);
+        searchHandler.removeCallbacksAndMessages(null);
+        channelExecutor.shutdownNow();
         if (player != null) player.release();
         super.onDestroy();
     }
