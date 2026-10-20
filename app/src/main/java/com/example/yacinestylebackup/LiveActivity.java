@@ -64,17 +64,6 @@ public class LiveActivity extends ComponentActivity {
     private ArrayAdapter<String> channelAdapter;
     private Button downloadMovieButton;
 
-    private final java.util.concurrent.ExecutorService channelExecutor =
-            java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
-                Thread t = new Thread(r, "M3U-Loader");
-                t.setPriority(Thread.NORM_PRIORITY - 1);
-                return t;
-            });
-    private final Handler channelSearchHandler = new Handler(Looper.getMainLooper());
-    private volatile int channelLoadToken = 0;
-    private String currentChannelQuery = "";
-    private Runnable pendingChannelSearch;
-
     @Override
     protected void onCreate(Bundle b) {
         super.onCreate(b);
@@ -104,8 +93,12 @@ public class LiveActivity extends ComponentActivity {
 
         sectionTitle.setText(favoritesOnly ? "⭐ المفضلة" : (selectedCategory == null ? "📺 كل القنوات" : "📁 " + selectedCategory));
 
+        loadChannels(selectedCategory);
+        updateMovieDownloadVisibility();
+
         channelAdapter = new ArrayAdapter<>(
                 this, android.R.layout.simple_list_item_1, names);
+
         channelList.setAdapter(channelAdapter);
 
         String autoplayName = getIntent().getStringExtra("autoplayName");
@@ -119,8 +112,6 @@ public class LiveActivity extends ComponentActivity {
             currentIndex = 0;
             updateMovieDownloadVisibility();
             playCurrent();
-        } else {
-            loadChannels(selectedCategory);
         }
 
         channelList.setOnItemClickListener((a, v, pos, id) -> {
@@ -148,10 +139,14 @@ public class LiveActivity extends ComponentActivity {
         });
 
         refresh.setOnClickListener(v -> {
-            currentChannelQuery = "";
-            channelDataReady = false;
-            search.setQuery("", false);
+            names.clear();
+            urls.clear();
+            currentIndex = -1;
+            updateMovieDownloadVisibility();
             loadChannels(selectedCategory);
+            channelAdapter.notifyDataSetChanged();
+            search.setQuery("", false);
+            status.setText(names.isEmpty() ? "لا توجد قنوات" : "تم تحديث القنوات • اختر قناة");
         });
 
         search.setOnQueryTextListener(new SearchView.OnQueryTextListener() {
@@ -175,107 +170,79 @@ public class LiveActivity extends ComponentActivity {
         for (int i = 0; i < line.length(); i++) {
             char ch = line.charAt(i);
             if (ch == '\"') quoted = !quoted;
-            else if (ch == ',' && !qu    private void loadChannels(String wanted) {
-        loadChannels(wanted, currentChannelQuery);
+            else if (ch == ',' && !quoted) found = i;
+        }
+        return found;
     }
 
-    private void loadChannels(String wanted, String query) {
-        final int token = ++channelLoadToken;
-        final String wantedCategory = wanted;
-        final String searchQuery = query == null ? "" :
-                query.trim().toLowerCase(java.util.Locale.ROOT);
-        final Set<String> favorites = new HashSet<>(
-                prefs.getStringSet("favorite_channels", new HashSet<>()));
+    private boolean isValidDisplayName(String name) {
+        if (name == null) return false;
+        String value = name.trim();
+        if (value.isEmpty() || value.startsWith("/9j/") || value.startsWith("data:image/")) return false;
+        return !value.matches("(?i)^[a-z0-9+/]{40,}={0,2}$");
+    }
 
-        status.setText("جاري تحميل القنوات...");
-        channelExecutor.execute(() -> {
-            ArrayList<String> foundNames = new ArrayList<>();
-            ArrayList<String> foundUrls = new ArrayList<>();
-            String currentCategory = "عام";
-            boolean skipNextUrl = false;
+    private String cleanCategory(String name) {
+        if (name == null) return "";
+        return name.replace("•", "")
+                .replace("●", "")
+                .replace("★", "")
+                .replace("---", "")
+                .replace("--", "")
+                .trim()
+                .replaceAll("\\s+", " ");
+    }
 
-            try (BufferedReader br = new BufferedReader(
-                    new InputStreamReader(
-                            getResources().openRawResource(R.raw.channels),
-                            java.nio.charset.StandardCharsets.UTF_8),
-                    64 * 1024)) {
-                String line;
-                String pendingName = null;
+    private boolean isCategoryHeader(String name) {
+        return name != null && (name.contains("---") || name.contains("★★") || name.contains("●"));
+    }
 
-                while ((line = br.readLine()) != null) {
-                    line = line.trim();
+    private void loadChannels(String wanted) {
+        String currentCategory = "عام";
+        boolean skipNextUrl = false;
 
-                    if (line.startsWith("#EXTINF")) {
-                        int comma = findDisplayNameComma(line);
-                        pendingName = comma >= 0
-                                ? line.substring(comma + 1).trim() : null;
+        try (BufferedReader br = new BufferedReader(
+                new InputStreamReader(getResources().openRawResource(R.raw.channels), java.nio.charset.StandardCharsets.UTF_8))) {
 
-                        if (isCategoryHeader(pendingName)) {
-                            currentCategory = cleanCategory(pendingName);
-                            skipNextUrl = true;
-                            pendingName = null;
-                        } else {
-                            skipNextUrl = false;
-                            if (!isValidDisplayName(pendingName)) {
-                                pendingName = null;
-                            }
+            String line;
+            String pendingName = null;
+
+            while ((line = br.readLine()) != null) {
+                line = line.trim();
+
+                if (line.startsWith("#EXTINF")) {
+                    int comma = findDisplayNameComma(line);
+                    pendingName = comma >= 0 ? line.substring(comma + 1).trim() : null;
+
+                    if (isCategoryHeader(pendingName)) {
+                        currentCategory = cleanCategory(pendingName);
+                        skipNextUrl = true;
+                        pendingName = null;
+                    } else {
+                        skipNextUrl = false;
+                        if (!isValidDisplayName(pendingName)) pendingName = null;
+                    }
+
+                } else if (!line.startsWith("#") && !line.isEmpty()) {
+                    if (skipNextUrl) {
+                        skipNextUrl = false;
+                        continue;
+                    }
+
+                    if (pendingName != null) {
+                        boolean categoryOk = wanted == null || wanted.equals(currentCategory);
+                        Set<String> favs = prefs.getStringSet("favorite_channels", new HashSet<>());
+                        boolean favoriteOk = !favoritesOnly || (favs != null && favs.contains(pendingName));
+                        if (categoryOk && favoriteOk) {
+                            names.add(pendingName);
+                            urls.add(line);
                         }
-                    } else if (!line.isEmpty() && !line.startsWith("#")) {
-                        if (skipNextUrl) {
-                            skipNextUrl = false;
-                            continue;
-                        }
-
-                        if (pendingName != null) {
-                            boolean categoryOk = wantedCategory == null ||
-                                    wantedCategory.equals(currentCategory);
-                            boolean favoriteOk = !favoritesOnly ||
-                                    favorites.contains(pendingName);
-                            boolean queryOk = searchQuery.isEmpty() ||
-                                    pendingName.toLowerCase(java.util.Locale.ROOT)
-                                            .contains(searchQuery);
-
-                            if (categoryOk && favoriteOk && queryOk) {
-                                foundNames.add(pendingName);
-                                foundUrls.add(line);
-                            }
-                            pendingName = null;
-                        }
+                        pendingName = null;
                     }
                 }
-            } catch (Exception ex) {
-                runOnUiThread(() -> {
-                    if (token != channelLoadToken || isFinishing() || isDestroyed()) return;
-                    status.setText("تعذر تحميل القنوات");
-                    Toast.makeText(this, "فشل تحميل ملف القنوات", Toast.LENGTH_LONG).show();
-                });
-                return;
             }
 
-            runOnUiThread(() -> {
-                if (token != channelLoadToken || isFinishing() || isDestroyed()) return;
-                names.clear();
-                urls.clear();
-                names.addAll(foundNames);
-                urls.addAll(foundUrls);
-                currentIndex = -1;
-                updateMovieDownloadVisibility();
-                if (channelAdapter != null) channelAdapter.notifyDataSetChanged();
-                status.setText(names.isEmpty()
-                        ? "لا توجد قنوات في هذا القسم"
-                        : "تم تحميل " + names.size() + " قناة • اختر قناة");
-            });
-        });
-    }
-
-    private void filterChannels(String query) {
-        currentChannelQuery = query == null ? "" : query;
-        if (pendingChannelSearch != null) {
-            channelSearchHandler.removeCallbacks(pendingChannelSearch);
-        }
-        pendingChannelSearch = () ->
-                loadChannels(selectedCategory, currentChannelQuery);
-        channelSearchHandler.postDelayed(pendingChannelSearch, 350);
+        } catch (Exception ignored) { }
     }
 
     private boolean isMovieCategory(String category) {
@@ -394,12 +361,22 @@ public class LiveActivity extends ComponentActivity {
             request.setDescription("جاري حفظ الفيلم في مجلد Downloads");
             request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
             request.setAllowedOverMetered(true);
-           private void filterChannels(String query) {
-        currentChannelQuery = query == null ? "" : query;
-        if (!channelDataReady) return;
+            request.setAllowedOverRoaming(false);
+            request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, fileName);
+            long downloadId = manager.enqueue(request);
+            if (downloadId > 0) {
+                Toast.makeText(this, "بدأ تنزيل الفيلم؛ ستجد الملف في مجلد Downloads", Toast.LENGTH_LONG).show();
+            } else {
+                Toast.makeText(this, "لم يبدأ التنزيل؛ جرّب الرابط مرة أخرى", Toast.LENGTH_LONG).show();
+            }
+        } catch (RuntimeException ex) {
+            Toast.makeText(this, "تعذّر بدء التنزيل. تأكد أن الرابط مباشر ويشير إلى ملف فيديو", Toast.LENGTH_LONG).show();
+        }
     }
 
-show();
+    private void playCurrent() {
+        if (currentIndex < 0 || currentIndex >= urls.size()) {
+            Toast.makeText(this, "اختر قناة أولاً", Toast.LENGTH_SHORT).show();
             return;
         }
 
@@ -449,6 +426,9 @@ show();
         player.play();
     }
 
+    private ArrayList<String> allChannelNames;
+    private ArrayList<String> allChannelUrls;
+    private boolean channelCacheReady = false;
 
     private void filterChannels(String query) {
         if (!channelCacheReady) {
@@ -580,8 +560,6 @@ show();
     @Override
     protected void onDestroy() {
         handler.removeCallbacksAndMessages(null);
-        channelSearchHandler.removeCallbacksAndMessages(null);
-        channelExecutor.shutdownNow();
         if (player != null) player.release();
         super.onDestroy();
     }
