@@ -206,7 +206,14 @@ public class MainActivity extends ComponentActivity {
 
     private void buildCategoryFolders() {
         categoryContainer.removeAllViews();
-        ArrayList<String> cats = readCategories();
+        new Thread(() -> {
+            ArrayList<String> cats = readCategories();
+            runOnUiThread(() -> buildCategoryFolders(cats));
+        }, "CategoryLoader").start();
+    }
+
+    private void buildCategoryFolders(ArrayList<String> cats) {
+        categoryContainer.removeAllViews();
 
         for (int i = 0; i < cats.size(); i += 2) {
             LinearLayout row = new LinearLayout(this);
