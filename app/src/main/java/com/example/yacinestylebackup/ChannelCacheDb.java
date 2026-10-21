@@ -240,22 +240,89 @@ final class ChannelCacheDb extends SQLiteOpenHelper {
 
         String normalizedName = normalizeForSearch(name);
         String normalizedCategory = normalizeForSearch(category);
+        String searchableText = normalizedName + " " + normalizedCategory;
 
-        if (normalizedName.contains(query) ||
-                normalizedCategory.contains(query)) {
-            return true;
-        }
+        if (searchableText.contains(query)) return true;
 
-        // كلمات البحث مجهزة مرة واحدة فقط لكل عملية بحث.
+        String[] tokens = searchableText.split("\\s+");
+
         for (String word : words) {
             if (word.isEmpty()) continue;
 
-            if (!normalizedName.contains(word) &&
-                    !normalizedCategory.contains(word)) {
+            boolean found = false;
+            for (String token : tokens) {
+                if (containsTokenOrPrefix(token, word)) {
+                    found = true;
+                    break;
+                }
+            }
+
+            if (!found) return false;
+        }
+
+        return words.length > 0;
+    }
+
+    private static boolean containsTokenOrPrefix(
+            String token, String word) {
+
+        if (token == null || word == null
+                || token.isEmpty() || word.isEmpty()) {
+            return false;
+        }
+
+        if (token.contains(word)) {
+            return true;
+        }
+
+        if (word.length() >= 3 && word.contains(token)) {
+            return true;
+        }
+
+        return word.length() >= 4 && token.length() >= 4
+                && editDistanceAtMostOne(token, word);
+    }
+
+    private static boolean editDistanceAtMostOne(
+            String first, String second) {
+
+        int len1 = first.length();
+        int len2 = second.length();
+
+        if (Math.abs(len1 - len2) > 1) {
+            return false;
+        }
+
+        int i = 0;
+        int j = 0;
+        int differences = 0;
+
+        while (i < len1 && j < len2) {
+            if (first.charAt(i) == second.charAt(j)) {
+                i++;
+                j++;
+                continue;
+            }
+
+            if (++differences > 1) {
                 return false;
             }
+
+            if (len1 > len2) {
+                i++;
+            } else if (len2 > len1) {
+                j++;
+            } else {
+                i++;
+                j++;
+            }
         }
-        return words.length > 0;
+
+        if (i < len1 || j < len2) {
+            differences++;
+        }
+
+        return differences <= 1;
     }
 
     private static int findDisplayNameComma(String line) {
