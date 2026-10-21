@@ -169,10 +169,6 @@ public class LiveActivity extends ComponentActivity {
             }
         });
 
-        if (autoplayName == null || autoplayUrl == null) {
-            loading.setVisibility(View.GONE);
-            status.setText(names.isEmpty() ? "" : "اختر قناة لبدء البث");
-        }
     }
 
     // Find the display-name separator comma, ignoring commas inside quoted attributes
