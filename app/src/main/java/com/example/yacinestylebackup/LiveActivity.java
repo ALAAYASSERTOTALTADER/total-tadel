@@ -216,10 +216,16 @@ public class LiveActivity extends ComponentActivity {
         final Set<String> favoriteNames = new HashSet<>(
                 prefs.getStringSet("favorite_channels", new HashSet<>()));
 
-        loading.setVisibility(View.VISIBLE);
-        status.setText(forceRefresh
-                ? "Please wait, updating channel database..."
-                : "Please wait, loading channels...");
+        boolean searching = query != null && !query.trim().isEmpty();
+        if (forceRefresh || !searching) {
+            loading.setVisibility(View.VISIBLE);
+            status.setText(forceRefresh
+                    ? "Please wait, updating channel database..."
+                    : "Please wait, loading channels...");
+        } else {
+            loading.setVisibility(View.GONE);
+            status.setText("");
+        }
 
         channelExecutor.execute(() -> {
             try {
@@ -229,11 +235,7 @@ public class LiveActivity extends ComponentActivity {
                 ArrayList<ChannelCacheDb.Channel> result =
                         channelDb.getChannels(
                                 wanted, query, favoritesOnly, favoriteNames,
-                                (percent, scanned, total) -> runOnUiThread(() -> {
-                                    if (token == loadToken && !isFinishing() && !isDestroyed()) {
-                                        status.setText("جاري البحث... " + percent + "%");
-                                    }
-                                }));
+                                null);
 
                 runOnUiThread(() -> {
                     if (token != loadToken || isFinishing() || isDestroyed()) return;
@@ -252,9 +254,16 @@ public class LiveActivity extends ComponentActivity {
                         channelAdapter.notifyDataSetChanged();
                     }
 
-                    status.setText(names.isEmpty()
-                            ? "لا توجد قنوات في هذا القسم"
-                            : "تم تحميل " + names.size() + " قناة • اختر قناة");
+                    loading.setVisibility(View.GONE);
+                    if (names.isEmpty()) {
+                        status.setText(currentQuery.trim().isEmpty()
+                                ? "لا توجد قنوات في هذا القسم"
+                                : "لا توجد نتائج مطابقة");
+                    } else {
+                        status.setText(currentQuery.trim().isEmpty()
+                                ? "تم تحميل " + names.size() + " قناة • اختر قناة"
+                                : "نتائج البحث: " + names.size());
+                    }
                 });
             } catch (Exception ex) {
                 runOnUiThread(() -> {
@@ -456,7 +465,7 @@ public class LiveActivity extends ComponentActivity {
         }
 
         pendingSearch = () -> loadChannels(selectedCategory, false);
-        searchHandler.postDelayed(pendingSearch, 300);
+        searchHandler.postDelayed(pendingSearch, 120);
     }
 
     private void toggleFavorite() {
