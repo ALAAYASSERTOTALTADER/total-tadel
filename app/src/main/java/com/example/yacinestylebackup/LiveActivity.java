@@ -171,7 +171,7 @@ public class LiveActivity extends ComponentActivity {
 
         if (autoplayName == null || autoplayUrl == null) {
             loading.setVisibility(View.GONE);
-            status.setText(names.isEmpty() ? "لا توجد قنوات في هذا القسم" : "اختر قناة لبدء البث");
+            status.setText(names.isEmpty() ? "" : "اختر قناة لبدء البث");
         }
     }
 
@@ -257,7 +257,7 @@ public class LiveActivity extends ComponentActivity {
                     loading.setVisibility(View.GONE);
                     if (names.isEmpty()) {
                         status.setText(currentQuery.trim().isEmpty()
-                                ? "لا توجد قنوات في هذا القسم"
+                                ? ""
                                 : "لا توجد نتائج مطابقة");
                     } else {
                         status.setText(currentQuery.trim().isEmpty()
