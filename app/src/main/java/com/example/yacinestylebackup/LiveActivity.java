@@ -39,6 +39,8 @@ import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -74,6 +76,10 @@ public class LiveActivity extends ComponentActivity {
     private Runnable pendingSearch;
     private volatile int loadToken = 0;
     private String currentQuery = "";
+
+    // احتفظ بنتائج كل قائمة في الذاكرة لإعادة فتحها بسرعة.
+    private static final Map<String, ArrayList<ChannelCacheDb.Channel>>
+            CHANNEL_LIST_CACHE = new HashMap<>();
 
     @Override
     protected void onCreate(Bundle b) {
@@ -223,11 +229,14 @@ public class LiveActivity extends ComponentActivity {
             status.setText("جاري البحث: 0%");
         }
 
+        if (forceRefresh) {
+            synchronized (CHANNEL_LIST_CACHE) {
+                CHANNEL_LIST_CACHE.clear();
+            }
+        }
+
         channelExecutor.execute(() -> {
             try {
-                channelDb.loadFromM3u(
-                        getResources(), R.raw.channels, forceRefresh);
-
                 ChannelCacheDb.SearchProgressListener progressListener = searching
                         ? (percent, scanned, total) -> runOnUiThread(() -> {
                             if (token != loadToken || isFinishing() || isDestroyed()) return;
@@ -235,18 +244,45 @@ public class LiveActivity extends ComponentActivity {
                         })
                         : null;
 
-                ArrayList<ChannelCacheDb.Channel> result =
-                        channelDb.getChannels(
-                                wanted, query, favoritesOnly, favoriteNames,
-                                progressListener);
+                String cacheKey = wanted == null ? "__ALL_CHANNELS__" : wanted;
+                ArrayList<ChannelCacheDb.Channel> result = null;
 
+                // افتح القائمة من الذاكرة أولاً؛ لا تعِد قراءة ملف M3U عند الرجوع لقائمة محفوظة.
+                if (!searching && !favoritesOnly && !forceRefresh) {
+                    synchronized (CHANNEL_LIST_CACHE) {
+                        ArrayList<ChannelCacheDb.Channel> cached =
+                                CHANNEL_LIST_CACHE.get(cacheKey);
+                        if (cached != null) {
+                            result = new ArrayList<>(cached);
+                        }
+                    }
+                }
+
+                if (result == null) {
+                    // تحميل/تحديث قاعدة البيانات فقط عند عدم وجود نتيجة محفوظة أو عند التحديث اليدوي.
+                    channelDb.loadFromM3u(
+                            getResources(), R.raw.channels, forceRefresh);
+
+                    result = channelDb.getChannels(
+                            wanted, query, favoritesOnly, favoriteNames,
+                            progressListener);
+
+                    if (!searching && !favoritesOnly) {
+                        synchronized (CHANNEL_LIST_CACHE) {
+                            CHANNEL_LIST_CACHE.put(
+                                    cacheKey, new ArrayList<>(result));
+                        }
+                    }
+                }
+
+                final ArrayList<ChannelCacheDb.Channel> channelsToDisplay = result;
                 runOnUiThread(() -> {
                     if (token != loadToken || isFinishing() || isDestroyed()) return;
 
                     names.clear();
                     urls.clear();
 
-                    for (ChannelCacheDb.Channel channel : result) {
+                    for (ChannelCacheDb.Channel channel : channelsToDisplay) {
                         names.add(channel.name);
                         urls.add(channel.url);
                     }
