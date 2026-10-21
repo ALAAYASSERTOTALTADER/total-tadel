@@ -229,7 +229,8 @@ public class MainActivity extends ComponentActivity {
         b.setMinHeight(dp(108));
         b.setPadding(dp(8), dp(12), dp(8), dp(12));
         b.setBackgroundResource(R.drawable.bg_category_card);
-        b.setOnClickListener(v -> openLive(category));
+        b.setOnClickListener(v -> openLive("🇪🇬 القنوات المصرية".equals(category)
+                ? "__EGYPTIAN_CHANNELS__" : category));
         return b;
     }
 
@@ -241,6 +242,8 @@ public class MainActivity extends ComponentActivity {
 
         new Thread(() -> {
             ArrayList<String> cats = readCategories();
+            cats.remove("🇪🇬 القنوات المصرية");
+            cats.add(0, "🇪🇬 القنوات المصرية");
             runOnUiThread(() -> {
                 loadedCategories.clear();
                 loadedCategories.addAll(cats);

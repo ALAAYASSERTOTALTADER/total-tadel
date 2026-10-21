@@ -142,7 +142,8 @@ final class ChannelCacheDb extends SQLiteOpenHelper {
         String selection = null;
         String[] args = null;
 
-        if (wantedCategory != null) {
+        boolean egyptianOnly = "__EGYPTIAN_CHANNELS__".equals(wantedCategory);
+        if (wantedCategory != null && !egyptianOnly) {
             selection = "category = ?";
             args = new String[]{wantedCategory};
         }
@@ -176,7 +177,8 @@ final class ChannelCacheDb extends SQLiteOpenHelper {
 
                 if (favoritesOnly && !favorites.contains(name)) {
                     // Still report progress for skipped rows.
-                } else if (matchesSearch(name, category, q, FAST_SEARCH_WORDS)) {
+                } else if ((!egyptianOnly || isEgyptianChannel(name, category))
+                        && matchesSearch(name, category, q, FAST_SEARCH_WORDS)) {
                     result.add(new Channel(name, url, category));
                 }
 
@@ -280,6 +282,21 @@ final class ChannelCacheDb extends SQLiteOpenHelper {
         }
 
         return out.toString();
+    }
+
+    private static boolean isEgyptianChannel(String name, String category) {
+        String value = normalizeForSearch((name == null ? "" : name) + " "
+                + (category == null ? "" : category));
+        String[] markers = {
+                "mbc masr", "on sport", "on time", "ontime", "cbc", "dmc",
+                "al hayat", "al nahar", "al kahera", "egypt", "nile",
+                "الحياة", "النهار", "القاهرة", "المصرية", "المصري",
+                "مصر", "الاهلي", "الأهلي"
+        };
+        for (String item : markers) {
+            if (value.contains(normalizeForSearch(item))) return true;
+        }
+        return false;
     }
 
     private static boolean matchesSearch(

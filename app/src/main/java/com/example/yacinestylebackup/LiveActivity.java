@@ -109,7 +109,7 @@ public class LiveActivity extends ComponentActivity {
         downloadMovieButton = findViewById(R.id.downloadMovieButton);
         downloadMovieButton.setOnClickListener(v -> downloadCurrentMovie());
 
-        sectionTitle.setText(favoritesOnly ? "⭐ المفضلة" : (selectedCategory == null ? "📺 كل القنوات" : "📁 " + selectedCategory));
+        sectionTitle.setText(favoritesOnly ? "⭐ المفضلة" : (selectedCategory == null ? "📺 كل القنوات" : ("__EGYPTIAN_CHANNELS__".equals(selectedCategory) ? "🇪🇬 القنوات المصرية" : "📁 " + selectedCategory)));
 
         channelAdapter = new ArrayAdapter<>(
                 this, android.R.layout.simple_list_item_1, names);
