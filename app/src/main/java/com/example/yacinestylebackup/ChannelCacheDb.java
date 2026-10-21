@@ -148,6 +148,8 @@ final class ChannelCacheDb extends SQLiteOpenHelper {
         }
 
         String q = normalizeForSearch(query);
+        final String[] FAST_SEARCH_WORDS =
+                q.isEmpty() ? new String[0] : q.split(" ");
 
         Set<String> favorites = favoriteNames == null
                 ? new HashSet<>() : favoriteNames;
@@ -174,13 +176,14 @@ final class ChannelCacheDb extends SQLiteOpenHelper {
 
                 if (favoritesOnly && !favorites.contains(name)) {
                     // Still report progress for skipped rows.
-                } else if (matchesSearch(name, category, q)) {
+                } else if (matchesSearch(name, category, q, FAST_SEARCH_WORDS)) {
                     result.add(new Channel(name, url, category));
                 }
 
                 if (progressListener != null && total > 0) {
                     int percent = Math.min(100, (int) ((scanned * 100L) / total));
-                    if (percent != lastReported) {
+                    // حدّث الواجهة كل 5% بدل تحديثها مع كل نسبة.
+                    if (percent == 100 || percent >= lastReported + 5) {
                         progressListener.onProgress(percent, scanned, total);
                         lastReported = percent;
                     }
@@ -196,44 +199,63 @@ final class ChannelCacheDb extends SQLiteOpenHelper {
     }
 
     private static String normalizeForSearch(String value) {
-        if (value == null) return "";
+        if (value == null || value.isEmpty()) return "";
 
-        String result = value.toLowerCase(Locale.ROOT)
-                .replace('أ', 'ا')
-                .replace('إ', 'ا')
-                .replace('آ', 'ا')
-                .replace('ى', 'ي')
-                .replace('ؤ', 'و')
-                .replace('ئ', 'ي')
-                .replace('ة', 'ه')
-                .replaceAll("[\\u064B-\\u065F\\u0670]", "")
-                .replaceAll("[^\\p{L}\\p{N}]+", " ")
-                .trim();
+        String lower = value.toLowerCase(Locale.ROOT);
+        StringBuilder out = new StringBuilder(lower.length());
+        boolean pendingSpace = false;
 
-        return result.replaceAll("\\s+", " ");
+        for (int i = 0; i < lower.length(); i++) {
+            char ch = lower.charAt(i);
+
+            // تجاهل التشكيل العربي.
+            if ((ch >= '\u064B' && ch <= '\u065F') || ch == '\u0670') {
+                continue;
+            }
+
+            switch (ch) {
+                case 'أ': case 'إ': case 'آ': ch = 'ا'; break;
+                case 'ى': ch = 'ي'; break;
+                case 'ؤ': ch = 'و'; break;
+                case 'ئ': ch = 'ي'; break;
+                case 'ة': ch = 'ه'; break;
+                default: break;
+            }
+
+            if (Character.isLetterOrDigit(ch)) {
+                if (pendingSpace && out.length() > 0) out.append(' ');
+                out.append(ch);
+                pendingSpace = false;
+            } else if (out.length() > 0) {
+                pendingSpace = true;
+            }
+        }
+
+        return out.toString();
     }
 
-    private static boolean matchesSearch(String name, String category, String query) {
+    private static boolean matchesSearch(
+            String name, String category, String query, String[] words) {
         if (query == null || query.isEmpty()) return true;
 
         String normalizedName = normalizeForSearch(name);
         String normalizedCategory = normalizeForSearch(category);
 
-        if (normalizedName.contains(query) || normalizedCategory.contains(query)) {
+        if (normalizedName.contains(query) ||
+                normalizedCategory.contains(query)) {
             return true;
         }
 
-        // Also allow all query words to match, even if punctuation or spacing differs.
-        String[] words = query.split("\\s+");
+        // كلمات البحث مجهزة مرة واحدة فقط لكل عملية بحث.
         for (String word : words) {
             if (word.isEmpty()) continue;
 
-            boolean found = normalizedName.contains(word)
-                    || normalizedCategory.contains(word);
-
-            if (!found) return false;
+            if (!normalizedName.contains(word) &&
+                    !normalizedCategory.contains(word)) {
+                return false;
+            }
         }
-        return true;
+        return words.length > 0;
     }
 
     private static int findDisplayNameComma(String line) {
