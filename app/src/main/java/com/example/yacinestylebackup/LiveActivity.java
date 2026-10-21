@@ -84,6 +84,11 @@ public class LiveActivity extends ComponentActivity {
         channelDb = new ChannelCacheDb(this);
         selectedCategory = getIntent().getStringExtra("category");
         favoritesOnly = getIntent().getBooleanExtra("favoritesOnly", false);
+        String incomingSearchQuery = getIntent().getStringExtra("searchQuery");
+        if (incomingSearchQuery != null && !incomingSearchQuery.trim().isEmpty()) {
+            currentQuery = incomingSearchQuery.trim();
+            selectedCategory = null;
+        }
 
         playerView = findViewById(R.id.player);
         playerContainer = findViewById(R.id.playerContainer);
@@ -100,6 +105,7 @@ public class LiveActivity extends ComponentActivity {
         Button lock = findViewById(R.id.lockButton);
         Button refresh = findViewById(R.id.refreshButton);
         SearchView search = findViewById(R.id.searchChannels);
+        if (!currentQuery.isEmpty()) search.setQuery(currentQuery, false);
         downloadMovieButton = findViewById(R.id.downloadMovieButton);
         downloadMovieButton.setOnClickListener(v -> downloadCurrentMovie());
 

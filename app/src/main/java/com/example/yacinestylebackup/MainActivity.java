@@ -14,6 +14,7 @@ import android.provider.Settings;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -66,6 +67,24 @@ public class MainActivity extends ComponentActivity {
         prefs = getSharedPreferences("legend", MODE_PRIVATE);
 
         findViewById(R.id.menuBtn).setOnClickListener(v -> drawer.openDrawer(Gravity.START));
+        EditText homeSearchInput = findViewById(R.id.homeSearchInput);
+        findViewById(R.id.homeSearchButton).setOnClickListener(v -> {
+            String query = homeSearchInput.getText().toString().trim();
+            if (query.isEmpty()) {
+                Toast.makeText(this, "اكتب اسم القناة أو الفيلم للبحث", Toast.LENGTH_SHORT).show();
+            } else {
+                openLiveSearch(query);
+            }
+        });
+        homeSearchInput.setOnEditorActionListener((v, actionId, event) -> {
+            String query = homeSearchInput.getText().toString().trim();
+            if (!query.isEmpty()) {
+                openLiveSearch(query);
+            } else {
+                Toast.makeText(this, "اكتب اسم القناة أو الفيلم للبحث", Toast.LENGTH_SHORT).show();
+            }
+            return true;
+        });
         findViewById(R.id.allChannelsBtn).setOnClickListener(v -> openLive(null));
         findViewById(R.id.lastChannelBtn).setOnClickListener(v -> openLastChannel());
         findViewById(R.id.liveSectionBtn).setOnClickListener(v -> openSectionCategory("live"));
@@ -503,6 +522,13 @@ public class MainActivity extends ComponentActivity {
         drawer.closeDrawer(Gravity.START);
         Intent i = new Intent(this, LiveActivity.class);
         if (category != null) i.putExtra("category", category);
+        startActivity(i);
+    }
+
+    private void openLiveSearch(String query) {
+        drawer.closeDrawer(Gravity.START);
+        Intent i = new Intent(this, LiveActivity.class);
+        i.putExtra("searchQuery", query);
         startActivity(i);
     }
 }

@@ -153,8 +153,9 @@ final class ChannelCacheDb extends SQLiteOpenHelper {
                 String category = c.getString(2);
 
                 if (favoritesOnly && !favorites.contains(name)) continue;
-                if (!q.isEmpty() &&
-                        !name.toLowerCase(Locale.ROOT).contains(q)) continue;
+                if (!q.isEmpty()
+                        && !name.toLowerCase(Locale.ROOT).contains(q)
+                        && !category.toLowerCase(Locale.ROOT).contains(q)) continue;
 
                 result.add(new Channel(name, url, category));
             }
