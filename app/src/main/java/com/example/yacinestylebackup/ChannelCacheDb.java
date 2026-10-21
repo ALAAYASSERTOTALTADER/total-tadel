@@ -196,8 +196,13 @@ final class ChannelCacheDb extends SQLiteOpenHelper {
         }
 
         if (q != null && !q.isEmpty()) {
+            java.util.IdentityHashMap<Channel, Integer> ranks =
+                    new java.util.IdentityHashMap<>();
+            for (Channel channel : result) {
+                ranks.put(channel, searchRank(channel, q));
+            }
             result.sort((a, b) ->
-                    Integer.compare(searchRank(a, q), searchRank(b, q)));
+                    Integer.compare(ranks.get(a), ranks.get(b)));
         }
 
         return result;
