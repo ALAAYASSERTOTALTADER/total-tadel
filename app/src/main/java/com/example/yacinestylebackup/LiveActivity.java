@@ -224,7 +224,7 @@ public class LiveActivity extends ComponentActivity {
                     : "Please wait, loading channels...");
         } else {
             loading.setVisibility(View.GONE);
-            status.setText("");
+            status.setText("جاري البحث: 0%");
         }
 
         channelExecutor.execute(() -> {
@@ -232,10 +232,17 @@ public class LiveActivity extends ComponentActivity {
                 channelDb.loadFromM3u(
                         getResources(), R.raw.channels, forceRefresh);
 
+                ChannelCacheDb.SearchProgressListener progressListener = searching
+                        ? (percent, scanned, total) -> runOnUiThread(() -> {
+                            if (token != loadToken || isFinishing() || isDestroyed()) return;
+                            status.setText("جاري البحث: " + percent + "%");
+                        })
+                        : null;
+
                 ArrayList<ChannelCacheDb.Channel> result =
                         channelDb.getChannels(
                                 wanted, query, favoritesOnly, favoriteNames,
-                                null);
+                                progressListener);
 
                 runOnUiThread(() -> {
                     if (token != loadToken || isFinishing() || isDestroyed()) return;
