@@ -170,6 +170,7 @@ public class LiveActivity extends ComponentActivity {
         });
 
         if (autoplayName == null || autoplayUrl == null) {
+            loading.setVisibility(View.GONE);
             status.setText(names.isEmpty() ? "لا توجد قنوات في هذا القسم" : "اختر قناة لبدء البث");
         }
     }
@@ -215,6 +216,7 @@ public class LiveActivity extends ComponentActivity {
         final Set<String> favoriteNames = new HashSet<>(
                 prefs.getStringSet("favorite_channels", new HashSet<>()));
 
+        loading.setVisibility(View.VISIBLE);
         status.setText(forceRefresh
                 ? "Please wait, updating channel database..."
                 : "Please wait, loading channels...");
@@ -257,7 +259,8 @@ public class LiveActivity extends ComponentActivity {
             } catch (Exception ex) {
                 runOnUiThread(() -> {
                     if (token != loadToken || isFinishing() || isDestroyed()) return;
-                    status.setText("تعذر تحميل القنوات");
+                    loading.setVisibility(View.GONE);
+                status.setText("تعذر تحميل القنوات");
                     Toast.makeText(this, "فشل تحميل ملف القنوات", Toast.LENGTH_LONG).show();
                 });
             }

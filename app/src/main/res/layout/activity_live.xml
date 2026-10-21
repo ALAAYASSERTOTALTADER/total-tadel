@@ -17,6 +17,15 @@
     </FrameLayout>
 
     <TextView android:id="@+id/status" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="اختر قناة لبدء البث" android:textColor="#FFFFFF" android:textSize="13sp" android:gravity="center" android:padding="8dp" android:background="#0D0A1C"/>
+    <ProgressBar
+        android:id="@+id/searchProgress"
+        style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="match_parent"
+        android:layout_height="5dp"
+        android:max="100"
+        android:progress="0"
+        android:visibility="gone" />
+
 
     <HorizontalScrollView android:layout_width="match_parent" android:layout_height="58dp" android:fillViewport="true" android:scrollbars="none" android:background="#110D27">
         <LinearLayout android:id="@+id/controlBar" android:layout_width="wrap_content" android:layout_height="match_parent" android:orientation="horizontal" android:gravity="center" android:paddingStart="8dp" android:paddingEnd="8dp">
