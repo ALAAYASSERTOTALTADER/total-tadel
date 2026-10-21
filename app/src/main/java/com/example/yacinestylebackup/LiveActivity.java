@@ -220,8 +220,8 @@ public class LiveActivity extends ComponentActivity {
         if (forceRefresh || !searching) {
             loading.setVisibility(View.VISIBLE);
             status.setText(forceRefresh
-                    ? "Please wait, updating channel database..."
-                    : "Please wait, loading channels...");
+                    ? "برجاء الانتظار، جاري تحديث قاعدة بيانات القنوات..."
+                    : "برجاء الانتظار، جاري تحميل القنوات...");
         } else {
             loading.setVisibility(View.GONE);
             status.setText("جاري البحث: 0%");
