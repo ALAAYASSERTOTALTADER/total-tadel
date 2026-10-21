@@ -121,9 +121,20 @@ final class ChannelCacheDb extends SQLiteOpenHelper {
         }
     }
 
+    interface SearchProgressListener {
+        void onProgress(int percent, int scanned, int total);
+    }
+
     synchronized ArrayList<Channel> getChannels(
             String wantedCategory, String query,
             boolean favoritesOnly, Set<String> favoriteNames) {
+        return getChannels(wantedCategory, query, favoritesOnly, favoriteNames, null);
+    }
+
+    synchronized ArrayList<Channel> getChannels(
+            String wantedCategory, String query,
+            boolean favoritesOnly, Set<String> favoriteNames,
+            SearchProgressListener progressListener) {
 
         ArrayList<Channel> result = new ArrayList<>();
         SQLiteDatabase db = getReadableDatabase();
@@ -136,8 +147,7 @@ final class ChannelCacheDb extends SQLiteOpenHelper {
             args = new String[]{wantedCategory};
         }
 
-        String q = query == null ? "" :
-                query.trim().toLowerCase(Locale.ROOT);
+        String q = normalizeForSearch(query);
 
         Set<String> favorites = favoriteNames == null
                 ? new HashSet<>() : favoriteNames;
@@ -147,21 +157,83 @@ final class ChannelCacheDb extends SQLiteOpenHelper {
                 new String[]{"name", "url", "category"},
                 selection, args, null, null, "id ASC")) {
 
+            int total = c.getCount();
+            int scanned = 0;
+            int lastReported = -1;
+
+            if (progressListener != null) {
+                progressListener.onProgress(total == 0 ? 100 : 0, 0, total);
+            }
+
             while (c.moveToNext()) {
                 String name = c.getString(0);
                 String url = c.getString(1);
                 String category = c.getString(2);
 
-                if (favoritesOnly && !favorites.contains(name)) continue;
-                if (!q.isEmpty()
-                        && !name.toLowerCase(Locale.ROOT).contains(q)
-                        && !category.toLowerCase(Locale.ROOT).contains(q)) continue;
+                scanned++;
 
-                result.add(new Channel(name, url, category));
+                if (favoritesOnly && !favorites.contains(name)) {
+                    // Still report progress for skipped rows.
+                } else if (matchesSearch(name, category, q)) {
+                    result.add(new Channel(name, url, category));
+                }
+
+                if (progressListener != null && total > 0) {
+                    int percent = Math.min(100, (int) ((scanned * 100L) / total));
+                    if (percent != lastReported) {
+                        progressListener.onProgress(percent, scanned, total);
+                        lastReported = percent;
+                    }
+                }
+            }
+
+            if (progressListener != null) {
+                progressListener.onProgress(100, total, total);
             }
         }
 
         return result;
+    }
+
+    private static String normalizeForSearch(String value) {
+        if (value == null) return "";
+
+        String result = value.toLowerCase(Locale.ROOT)
+                .replace('أ', 'ا')
+                .replace('إ', 'ا')
+                .replace('آ', 'ا')
+                .replace('ى', 'ي')
+                .replace('ؤ', 'و')
+                .replace('ئ', 'ي')
+                .replace('ة', 'ه')
+                .replaceAll("[\\u064B-\\u065F\\u0670]", "")
+                .replaceAll("[^\\p{L}\\p{N}]+", " ")
+                .trim();
+
+        return result.replaceAll("\\s+", " ");
+    }
+
+    private static boolean matchesSearch(String name, String category, String query) {
+        if (query == null || query.isEmpty()) return true;
+
+        String normalizedName = normalizeForSearch(name);
+        String normalizedCategory = normalizeForSearch(category);
+
+        if (normalizedName.contains(query) || normalizedCategory.contains(query)) {
+            return true;
+        }
+
+        // Also allow all query words to match, even if punctuation or spacing differs.
+        String[] words = query.split("\\s+");
+        for (String word : words) {
+            if (word.isEmpty()) continue;
+
+            boolean found = normalizedName.contains(word)
+                    || normalizedCategory.contains(word);
+
+            if (!found) return false;
+        }
+        return true;
     }
 
     private static int findDisplayNameComma(String line) {

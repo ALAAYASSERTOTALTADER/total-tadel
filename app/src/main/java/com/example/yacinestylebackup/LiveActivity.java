@@ -226,7 +226,12 @@ public class LiveActivity extends ComponentActivity {
 
                 ArrayList<ChannelCacheDb.Channel> result =
                         channelDb.getChannels(
-                                wanted, query, favoritesOnly, favoriteNames);
+                                wanted, query, favoritesOnly, favoriteNames,
+                                (percent, scanned, total) -> runOnUiThread(() -> {
+                                    if (token == loadToken && !isFinishing() && !isDestroyed()) {
+                                        status.setText("جاري البحث... " + percent + "%");
+                                    }
+                                }));
 
                 runOnUiThread(() -> {
                     if (token != loadToken || isFinishing() || isDestroyed()) return;
