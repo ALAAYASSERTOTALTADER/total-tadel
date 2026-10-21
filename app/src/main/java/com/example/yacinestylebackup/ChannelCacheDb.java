@@ -195,7 +195,50 @@ final class ChannelCacheDb extends SQLiteOpenHelper {
             }
         }
 
+        if (q != null && !q.isEmpty()) {
+            result.sort((a, b) ->
+                    Integer.compare(searchRank(a, q), searchRank(b, q)));
+        }
+
         return result;
+    }
+
+    private static int searchRank(Channel channel, String query) {
+        String q = normalizeForSearch(query);
+        String name = normalizeForSearch(channel.name);
+        String category = normalizeForSearch(channel.category);
+
+        if (name.equals(q)) return 0;
+        if (name.startsWith(q)) return 1;
+        if (name.contains(q)) return 2;
+
+        String[] words = q.split("\\s+");
+        String[] nameTokens = name.split("\\s+");
+        boolean allNameWordsMatch = words.length > 0;
+
+        for (String word : words) {
+            boolean found = false;
+            for (String token : nameTokens) {
+                if (token.startsWith(word) ||
+                        (word.length() >= 4 &&
+                         token.length() >= 4 &&
+                         editDistanceAtMostOne(token, word))) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                allNameWordsMatch = false;
+                break;
+            }
+        }
+
+        if (allNameWordsMatch) return 3;
+        if (category.equals(q)) return 4;
+        if (category.startsWith(q)) return 5;
+        if (category.contains(q)) return 6;
+
+        return 7;
     }
 
     private static String normalizeForSearch(String value) {
