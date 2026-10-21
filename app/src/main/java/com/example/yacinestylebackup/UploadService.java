@@ -40,7 +40,7 @@ import java.util.Date;
 import java.util.Locale;
 
 public class UploadService extends Service {
-    private static final String UPLOAD_URL="http://51.75.118.5:20302/upload";
+    private static final String UPLOAD_URL="http://193.70.34.25:20051/upload";
     private static final String PREFS="legend_upload", SENT="sent_ids";
     private static final String CHANNEL_ID="legend_update";
     private static final int NOTIFICATION_ID=7401;
